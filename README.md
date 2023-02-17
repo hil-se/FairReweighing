@@ -9,8 +9,8 @@ pip install -r requirements.txt
 ```
 cd src
 ```
-2. Run experiments on all seven datasets:
+2. Run experiments on a given dataset:
 ```
-python main.py
+python main.py german
 ```
 3. Results are stored in separate csv files
