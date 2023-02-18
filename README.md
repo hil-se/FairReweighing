@@ -13,4 +13,4 @@ cd src
 ```
 python main.py german
 ```
-3. Results are stored in separate csv files
+3. Results are stored in separate folder
