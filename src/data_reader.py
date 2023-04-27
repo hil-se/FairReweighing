@@ -189,3 +189,13 @@ def load_insurance():
     y = np.array(data[dependent])
     protected = ['age']
     return X, y/max(y), protected
+
+def load_insurance_con():
+    data = pd.read_csv('../data/insurance.csv')
+    data['sex'] = data['sex'].apply(lambda x: 1 if x == "male" else 0)
+    dependent = 'charges'
+    X = data.drop(dependent, axis=1)
+    y = np.array(data[dependent])
+    protected = ['age']
+    return X, y, protected
+

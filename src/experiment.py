@@ -8,7 +8,7 @@ from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 
 from data_reader import load_communities, load_insurance, load_lsac, load_german, load_heart, load_synthetic, \
-    clean_communities_full, clean_lawschool_full
+    clean_communities_full, clean_lawschool_full, load_insurance_con
 from density_balance import DensityBalance
 from metrics import Metrics
 from kde import kde_fair
@@ -20,7 +20,7 @@ class Experiment():
     def __init__(self, data="Community", regressor="Linear", balance="None", density_model="Neighbor"):
         datasets = {"Community": clean_communities_full, "Insurance": load_insurance,
                     "LSAC": clean_lawschool_full, "German": load_german,
-                    "Heart": load_heart, "Synthetic": load_synthetic, "Community_Con": load_communities}
+                    "Heart": load_heart, "Synthetic": load_synthetic, "Community_Con": load_communities, "Insurance_Con": load_insurance_con}
         regressors = {"SVR": SVR(kernel="linear"), "Linear": LinearRegression(positive=True),
                       "Logistic": LogisticRegression(), "DT": DecisionTreeRegressor(max_depth=8),
                       "RF": RandomForestClassifier()}

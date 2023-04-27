@@ -70,7 +70,7 @@ def lsac(density_model='Neighbor', repeat=30):
 
 
 def insurance(density_model='Neighbor', repeat=30):
-    data = "Insurance"
+    data = "Insurance_Con"
     regressor = "Linear"
     treatments = ["None", "Reweighing"]
     results = []
@@ -95,5 +95,5 @@ def run(data="Community", regressor="Linear", balance="Reweighing", density_mode
 
 
 if __name__ == "__main__":
-    community(density_model='Neighbor', repeat=10)
+    insurance(density_model='Neighbor', repeat=30)
     # eval(cmd())
