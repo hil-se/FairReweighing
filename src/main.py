@@ -45,7 +45,7 @@ def synthetic(density_model='Neighbor', repeat=30):
 
 
 def community(density_model='Neighbor', repeat=30):
-    data = "Community"
+    data = "Community_Con"
     regressor = "Linear"
     treatments = ["None", "Reweighing"]
     results = []
@@ -95,4 +95,5 @@ def run(data="Community", regressor="Linear", balance="Reweighing", density_mode
 
 
 if __name__ == "__main__":
-    eval(cmd())
+    community(density_model='Neighbor', repeat=10)
+    # eval(cmd())

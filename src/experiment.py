@@ -7,17 +7,20 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 
-from data_reader import load_communities, load_insurance, load_lsac, load_german, load_heart, load_synthetic
+from data_reader import load_communities, load_insurance, load_lsac, load_german, load_heart, load_synthetic, \
+    clean_communities_full, clean_lawschool_full
 from density_balance import DensityBalance
 from metrics import Metrics
+from kde import kde_fair
+import torch
 
 
 class Experiment():
 
     def __init__(self, data="Community", regressor="Linear", balance="None", density_model="Neighbor"):
-        datasets = {"Community": load_communities, "Insurance": load_insurance,
-                    "LSAC": load_lsac, "German": load_german,
-                    "Heart": load_heart, "Synthetic": load_synthetic}
+        datasets = {"Community": clean_communities_full, "Insurance": load_insurance,
+                    "LSAC": clean_lawschool_full, "German": load_german,
+                    "Heart": load_heart, "Synthetic": load_synthetic, "Community_Con": load_communities}
         regressors = {"SVR": SVR(kernel="linear"), "Linear": LinearRegression(positive=True),
                       "Logistic": LogisticRegression(), "DT": DecisionTreeRegressor(max_depth=8),
                       "RF": RandomForestClassifier()}
@@ -61,9 +64,12 @@ class Experiment():
 
     def test(self, X, y):
         y_pred = self.regressor.predict(X)
+        Theta = np.linspace(0, 1.0, 41)
         m = Metrics(y, y_pred)
         result = {
             "MSE": m.mse(),
+            "RMSE": m.rmse(),
+            "MAE" : m.mae(),
             "R2": m.r2()
             # "Accuracy": m.accuracy(),
             # "F1": m.f1(),
@@ -71,6 +77,12 @@ class Experiment():
         for key in self.protected:
             result["AOD_" + str(key)] = m.AOD(np.array(self.X_test[key]))
             result["AODc_" + str(key)] = m.AODc(np.array(self.X_test[key]))
+            result["GDP_" + str(key)] = m.GDP(np.array(self.X_test[key]))
+            # result["DP_" + str(key)] = m.DP_disp(self.X_test[key], Theta)
+            # result["BGL_mse_" + str(key)] = m.bgl_mse(self.X_test[key])
+            # result["BGL_mae_" + str(key)] = m.bgl_mae(self.X_test[key])
+            # result["Con_Indi_" + str(key)] = m.convex_individual(self.X_test[key])
+            # result["Con_Grp_" + str(key)] = m.convex_group(self.X_test[key])
         return result
 
     def train_test_split(self, train_ratio=0.5):
