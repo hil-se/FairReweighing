@@ -1,4 +1,4 @@
-### Generalized Pairwise Fairness for Regression and Classification
+### Generalized Equalized Odds for Regression and Classification
 
 #### Usage
 0. Install dependencies:
