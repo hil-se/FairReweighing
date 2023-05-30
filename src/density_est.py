@@ -22,7 +22,6 @@ class DensityNeighbor():
         self.dist = DistanceMetric.get_metric(distance)
 
     def density(self, X):
-        # X should be numeric.
         scaler = StandardScaler()
         X_z = scaler.fit_transform(X)
         dists = self.dist.pairwise(X_z)

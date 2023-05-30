@@ -8,8 +8,7 @@ class DensityBalance():
         models = {'Neighbor': DensityNeighbor(), "Kernel": DensityKernel()}
         self.model = models[model]
 
-    def weight(self, A, y, treatment="FairBalance", weighting="None"):
-        # treatment in {"FairBalance", "FairBalanceVariant", "GroupBalance", "Reweighing"}
+    def weight(self, A, y, treatment="FairBalance"):
         X = np.concatenate((A, y), axis=1)
         w = self.model.density(X)
 
@@ -26,6 +25,5 @@ class DensityBalance():
                 else:
                     weight = wA * wy / w
 
-        # Normalize
         weight = len(weight) * weight / sum(weight)
         return weight

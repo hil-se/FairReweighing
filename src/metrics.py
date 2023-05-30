@@ -1,12 +1,11 @@
 import numpy as np
-import pandas as pd
 import sklearn.metrics
 import torch
 from fairlearn.metrics import MetricFrame
-from kde import kde_fair
 
-from src.DP_helper import weighted_pmf, extract_group_pred, pmf2disp
-from fairlearn.reductions import BoundedGroupLoss, ZeroOneLoss
+from kde import kde_fair
+from DP_helper import weighted_pmf, extract_group_pred, pmf2disp
+
 
 class Metrics:
     def __init__(self, y, y_pred):
@@ -17,9 +16,9 @@ class Metrics:
     def bgl_mse(self, s):
         s.name = "Sen"
         mse_frame = MetricFrame(metrics=sklearn.metrics.mean_squared_error,
-                            y_true=self.y,
-                            y_pred=self.y_pred,
-                            sensitive_features=s)
+                                y_true=self.y,
+                                y_pred=self.y_pred,
+                                sensitive_features=s)
 
         return max(mse_frame.by_group)
 
@@ -50,7 +49,117 @@ class Metrics:
     def r2(self):
         return sklearn.metrics.r2_score(self.y, self.y_pred)
 
+    def confusion(self, y, y_pred):
+        tp = 0
+        fp = 0
+        tn = 0
+        fn = 0
+        for i in range(len(y)):
+            if y[i] > 0:
+                if y_pred[i] > 0:
+                    tp += 1
+                else:
+                    fn += 1
+            else:
+                if y_pred[i] > 0:
+                    fp += 1
+                else:
+                    tn += 1
+        return tp, fp, tn, fn
+
+    def EOD(self, s):
+        # True positive rate (TPR)
+        y0 = self.y[s == 0]
+        y0_pred = self.y_pred[s == 0]
+        y1 = self.y[s == 1]
+        y1_pred = self.y_pred[s == 1]
+
+        tp, fp, tn, fn = self.confusion(y0, y0_pred)
+        op0 = float(tp) / (tp + fn)
+        tp, fp, tn, fn = self.confusion(y1, y1_pred)
+        op1 = float(tp) / (tp + fn)
+        return op1 - op0
+
     def AOD(self, s):
+        # equal TPR and equal FPR
+        y0 = self.y[s == 0]
+        y0_pred = self.y_pred[s == 0]
+        y1 = self.y[s == 1]
+        y1_pred = self.y_pred[s == 1]
+
+        tp, fp, tn, fn = self.confusion(y0, y0_pred)
+        od0 = float(tp) / (tp + fn) + float(fp) / (fp + tn)
+        tp, fp, tn, fn = self.confusion(y1, y1_pred)
+        od1 = float(tp) / (tp + fn) + float(fp) / (fp + tn)
+        return (od1 - od0) / 2
+
+    def within_diff(self, s):
+        y0 = self.y[s == 0]
+        y0_pred = self.y_pred[s == 0]
+        y1 = self.y[s == 1]
+        y1_pred = self.y_pred[s == 1]
+        tpr0 = self.pairwise_tpr(y0, y0, y0_pred, y0_pred)
+        tpr1 = self.pairwise_tpr(y1, y1, y1_pred, y1_pred)
+        fpr0 = self.pairwise_fpr(y0, y0, y0_pred, y0_pred)
+        fpr1 = self.pairwise_fpr(y1, y1, y1_pred, y1_pred)
+        return ((tpr1 - fpr1) - (tpr0 - fpr0)) / 2
+
+    def within_diff_c(self, s):
+        y0 = self.y[s == 0]
+        y0_pred = self.y_pred[s == 0]
+        y1 = self.y[s == 1]
+        y1_pred = self.y_pred[s == 1]
+        tpr0 = self.pairwise_tpr_c(y0, y0, y0_pred, y0_pred)
+        tpr1 = self.pairwise_tpr_c(y1, y1, y1_pred, y1_pred)
+        fpr0 = self.pairwise_fpr_c(y0, y0, y0_pred, y0_pred)
+        fpr1 = self.pairwise_fpr_c(y1, y1, y1_pred, y1_pred)
+        return ((tpr1 - fpr1) - (tpr0 - fpr0)) / 2
+
+    def pairwise_tpr(self, y0, y1, y0_pred, y1_pred):
+        t = 0
+        tp = 0
+        for i in range(len(y0)):
+            for j in range(len(y1)):
+                if y0[i] > y1[j]:
+                    t += 1
+                    if y0_pred[i] > y1_pred[j]:
+                        tp += 1
+        return float(tp) / t
+
+    def pairwise_fpr(self, y0, y1, y0_pred, y1_pred):
+        n = 0
+        fp = 0
+        for i in range(len(y0)):
+            for j in range(len(y1)):
+                if y0[i] < y1[j]:
+                    n += 1
+                    if y0_pred[i] > y1_pred[j]:
+                        fp += 1
+        return float(fp) / n
+
+    def pairwise_tpr_c(self, y0, y1, y0_pred, y1_pred):
+        t = 0
+        tp = 0
+        for i in range(len(y0)):
+            for j in range(len(y1)):
+                if y0[i] > y1[j]:
+                    t += (y0[i] - y1[j]) ** 2
+                    if y0_pred[i] > y1_pred[j]:
+                        tp += (y0_pred[i] - y1_pred[j]) * (y0[i] - y1[j])
+        return float(tp) / t
+
+    def pairwise_fpr_c(self, y0, y1, y0_pred, y1_pred):
+        n = 0
+        fp = 0
+        for i in range(len(y0)):
+            for j in range(len(y1)):
+                if y0[i] < y1[j]:
+                    n += (y1[j] - y0[i]) ** 2
+                    if y0_pred[i] > y1_pred[j]:
+                        fp += (y0_pred[i] - y1_pred[j]) * (y1[j] - y0[i])
+        return float(fp) / n
+
+    def gAOD(self, s):
         # s is an array of numerical values of a sensitive attribute
         t = n = tp = fp = tn = fn = 0
         for i in range(len(self.y)):
@@ -76,7 +185,15 @@ class Metrics:
         aod = (tpr + fpr - tnr - fnr) / 2
         return aod
 
-    def AODc(self, s):
+    def gEOD(self, s):
+        # s is an array of numerical values of a sensitive attribute
+        return self.gAOD(s) + self.within_diff(s)
+
+    def cEOD(self, s):
+        # s is an array of numerical values of a sensitive attribute
+        return self.cAOD(s) + self.within_diff_c(s)
+
+    def cAOD(self, s):
         # s is an array of numerical values of a sensitive attribute
         t = n = tp = fp = 0.0
         for i in range(len(self.y)):
@@ -138,6 +255,7 @@ class Metrics:
         y1 = self.y[s == 1]
         y0_pred = self.y_pred[s == 0]
         y1_pred = self.y_pred[s == 1]
+
         def convex_grp(y0, y1, y0_pred, y1_pred):
             if isinstance(y0, float):
                 d = np.exp(-(y0 - y1) ** 2)
@@ -151,4 +269,3 @@ class Metrics:
                 error += convex_grp(y0[i], y1[j], y0_pred[i], y1_pred[j])
         error = float(error) / len(y0) / len(y1)
         return error ** 2
-

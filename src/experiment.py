@@ -7,20 +7,18 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 
-from data_reader import load_communities, load_insurance, load_lsac, load_german, load_heart, load_synthetic, \
-    clean_communities_full, clean_lawschool_full, load_insurance_con
+from data_reader import load_communities_con, load_insurance, load_lsac, load_german, load_heart, \
+    load_communities_bi
 from density_balance import DensityBalance
 from metrics import Metrics
-from kde import kde_fair
-import torch
 
 
 class Experiment():
 
     def __init__(self, data="Community", regressor="Linear", balance="None", density_model="Neighbor"):
-        datasets = {"Community": clean_communities_full, "Insurance": load_insurance,
-                    "LSAC": clean_lawschool_full, "German": load_german,
-                    "Heart": load_heart, "Synthetic": load_synthetic, "Community_Con": load_communities, "Insurance_Con": load_insurance_con}
+        datasets = {"Community": load_communities_bi, "Insurance": load_insurance,
+                    "LSAC": load_lsac, "German": load_german,
+                    "Heart": load_heart, "Community_Con": load_communities_con}
         regressors = {"SVR": SVR(kernel="linear"), "Linear": LinearRegression(positive=True),
                       "Logistic": LogisticRegression(), "DT": DecisionTreeRegressor(max_depth=8),
                       "RF": RandomForestClassifier()}
@@ -68,16 +66,22 @@ class Experiment():
         m = Metrics(y, y_pred)
         result = {
             "MSE": m.mse(),
-            "RMSE": m.rmse(),
-            "MAE" : m.mae(),
-            "R2": m.r2()
-            # "Accuracy": m.accuracy(),
-            # "F1": m.f1(),
+            # "RMSE": m.rmse(),
+            # "MAE" : m.mae(),
+            # "R2": m.r2()
+            "Accuracy": m.accuracy(),
+            "F1": m.f1(),
         }
         for key in self.protected:
             result["AOD_" + str(key)] = m.AOD(np.array(self.X_test[key]))
-            result["AODc_" + str(key)] = m.AODc(np.array(self.X_test[key]))
-            result["GDP_" + str(key)] = m.GDP(np.array(self.X_test[key]))
+            result["gAOD_" + str(key)] = m.gAOD(np.array(self.X_test[key]))
+            result["cAOD_" + str(key)] = m.cAOD(np.array(self.X_test[key]))
+
+            result["EOD_" + str(key)] = m.EOD(np.array(self.X_test[key]))
+            result["gEOD_" + str(key)] = m.gEOD(np.array(self.X_test[key]))
+            result["cEOD_" + str(key)] = m.cEOD(np.array(self.X_test[key]))
+
+            # result["GDP_" + str(key)] = m.GDP(np.array(self.X_test[key]))
             # result["DP_" + str(key)] = m.DP_disp(self.X_test[key], Theta)
             # result["BGL_mse_" + str(key)] = m.bgl_mse(self.X_test[key])
             # result["BGL_mae_" + str(key)] = m.bgl_mae(self.X_test[key])

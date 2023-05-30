@@ -31,20 +31,19 @@ def heart(density_model='Neighbor', repeat=30):
     df.to_csv("../result/" + data + "_" + density_model + ".csv", index=False)
 
 
-def synthetic(density_model='Neighbor', repeat=30):
-    data = "Synthetic"
+def community(density_model='Neighbor', repeat=30):
+    data = "Community"
     regressor = "Linear"
     treatments = ["None", "Reweighing"]
     results = []
     for treatment in treatments:
-        result = run(data=data, regressor=regressor, balance=treatment,
-                     density_model=density_model, repeat=repeat)
+        result = run(data=data, regressor=regressor, balance=treatment, density_model=density_model, repeat=repeat)
         results.append(result)
     df = pd.DataFrame(results)
     df.to_csv("../result/" + data + "_" + density_model + ".csv", index=False)
 
 
-def community(density_model='Neighbor', repeat=30):
+def community_con(density_model='Neighbor', repeat=30):
     data = "Community_Con"
     regressor = "Linear"
     treatments = ["None", "Reweighing"]
@@ -70,7 +69,7 @@ def lsac(density_model='Neighbor', repeat=30):
 
 
 def insurance(density_model='Neighbor', repeat=30):
-    data = "Insurance_Con"
+    data = "Insurance"
     regressor = "Linear"
     treatments = ["None", "Reweighing"]
     results = []
@@ -95,5 +94,4 @@ def run(data="Community", regressor="Linear", balance="Reweighing", density_mode
 
 
 if __name__ == "__main__":
-    insurance(density_model='Neighbor', repeat=30)
-    # eval(cmd())
+    eval(cmd())
