@@ -131,3 +131,24 @@ def load_insurance():
     y = np.array(data[dependent])
     protected = ['age']
     return X, y / max(y), protected
+
+
+def load_synthetic(n=5000, p=0.7):
+    # n is the number of data points.
+    # 0 <= p <= 1 is the sampling probability of Male (sex=1).
+    keys = ["sex", "height"]
+    data = {key: [] for key in keys}
+    y = []
+    for i in range(n):
+        rand = np.random.random()
+        sex = 1 if rand < p else 0
+        height = np.random.normal(1.65 + 0.1 * sex, 0.1 + 0.05 * sex)
+        power = np.random.normal(0.5 + 0.1 * sex, 0.1 + 0.05 * sex)
+        jump = height + power
+        data["sex"].append(sex)
+        data["height"].append(height)
+        y.append(jump)
+    X = pd.DataFrame(data, columns=keys)
+    y = np.array(y)
+    protected = ["sex"]
+    return X, y, protected

@@ -1,4 +1,4 @@
-### Generalized Equalized Odds for Regression and Classification
+### FairReweighing: density estimation-based reweighing framework for improving separation in fair regression
 
 #### Usage
 0. Install dependencies:

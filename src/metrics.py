@@ -1,9 +1,9 @@
 import numpy as np
+import pandas as pd
 import sklearn.metrics
-import torch
-from fairlearn.metrics import MetricFrame
+from fairlearn.metrics import demographic_parity_difference
+from sklearn.linear_model import LogisticRegression
 
-from kde import kde_fair
 from DP_helper import weighted_pmf, extract_group_pred, pmf2disp
 
 
@@ -13,23 +13,30 @@ class Metrics:
         self.y = y
         self.y_pred = y_pred
 
-    def bgl_mse(self, s):
-        s.name = "Sen"
-        mse_frame = MetricFrame(metrics=sklearn.metrics.mean_squared_error,
-                                y_true=self.y,
-                                y_pred=self.y_pred,
-                                sensitive_features=s)
+    def DP(self, s):
+        dp = demographic_parity_difference(self.y,
+                                           self.y_pred,
+                                           sensitive_features=s)
 
-        return max(mse_frame.by_group)
+        return dp
 
-    def bgl_mae(self, s):
-        s.name = "Sen"
-        mae_frame = MetricFrame(metrics=sklearn.metrics.mean_absolute_error,
-                                y_true=self.y,
-                                y_pred=self.y_pred,
-                                sensitive_features=s)
-
-        return max(mae_frame.by_group)
+    # def bgl_mse(self, s):
+    #     s.name = "Sen"
+    #     mse_frame = MetricFrame(metrics=sklearn.metrics.mean_squared_error,
+    #                             y_true=self.y,
+    #                             y_pred=self.y_pred,
+    #                             sensitive_features=s)
+    #
+    #     return max(mse_frame.by_group)
+    #
+    # def bgl_mae(self, s):
+    #     s.name = "Sen"
+    #     mae_frame = MetricFrame(metrics=sklearn.metrics.mean_absolute_error,
+    #                             y_true=self.y,
+    #                             y_pred=self.y_pred,
+    #                             sensitive_features=s)
+    #
+    #     return max(mae_frame.by_group)
 
     def mse(self):
         return sklearn.metrics.mean_squared_error(self.y, self.y_pred)
@@ -218,17 +225,17 @@ class Metrics:
         DP_disp = max([pmf2disp(PMF_g, PMF_all) for PMF_g in PMF_group])
         return DP_disp
 
-    def GDP(self, s):
-        test_sol = 1e-3
-        device_gpu = torch.device("mps")
-        x_appro = torch.arange(test_sol, 1 - test_sol, test_sol).to(device_gpu)
-        KDE_FAIR = kde_fair(x_appro)
-        penalty = KDE_FAIR.forward
-        y_pred = torch.tensor(self.y_pred.astype(np.float32)).to(device_gpu)
-        s = torch.tensor(s.astype(np.float32)).to(device_gpu)
-        DP_test = penalty(y_pred, s, device_gpu).item()
-
-        return DP_test
+    # def GDP(self, s):
+    #     test_sol = 1e-3
+    #     device_gpu = torch.device("mps")
+    #     x_appro = torch.arange(test_sol, 1 - test_sol, test_sol).to(device_gpu)
+    #     KDE_FAIR = kde_fair(x_appro)
+    #     penalty = KDE_FAIR.forward
+    #     y_pred = torch.tensor(self.y_pred.astype(np.float32)).to(device_gpu)
+    #     s = torch.tensor(s.astype(np.float32)).to(device_gpu)
+    #     DP_test = penalty(y_pred, s, device_gpu).item()
+    #
+    #     return DP_test
 
     def convex_individual(self, s):
         y0 = self.y[s == 0]
@@ -269,3 +276,43 @@ class Metrics:
                 error += convex_grp(y0[i], y1[j], y0_pred[i], y1_pred[j])
         error = float(error) / len(y0) / len(y1)
         return error ** 2
+
+    def r_sep(self, s):
+
+        joint = pd.DataFrame({'y': self.y, 'y_pred': self.y_pred}, columns=['y', 'y_pred'])
+        margin = self.y.reshape(-1, 1)
+        model_joint = LogisticRegression().fit(joint, s)
+        model_margin = LogisticRegression().fit(margin, s)
+
+        acc_joint = model_joint.score(joint, s)
+        acc_margin = model_margin.score(margin, s)
+
+        prob_joint = model_joint.predict_proba(joint)[:, 1]
+        prob_margin = model_margin.predict_proba(margin)[:, 1]
+        ratio = 0
+
+        for i in range(len(s)):
+            t = (prob_joint[i] / (1 - prob_joint[i])) * ((1 - prob_margin[i]) / prob_margin[i])
+            ratio = ratio + t
+        ratio = ratio / len(s)
+        return ratio
+
+    def r_sep_a(self, s):
+
+        joint = pd.DataFrame({'y': self.y, 'y_pred': self.y_pred}, columns=['y', 'y_pred'])
+        margin = self.y.reshape(-1, 1)
+        model_joint = LogisticRegression().fit(joint, s)
+        model_margin = LogisticRegression().fit(margin, s)
+
+        acc_joint = model_joint.score(joint, s)
+        acc_margin = model_margin.score(margin, s)
+
+        prob_joint = model_joint.predict_proba(joint)[:, 1]
+        prob_margin = model_margin.predict_proba(margin)[:, 1]
+        ratio = 0
+
+        for i in range(len(s)):
+            t = prob_joint[i] / (1 - prob_joint[i])
+            ratio = ratio + t
+        ratio = ratio / len(s)
+        return ratio

@@ -8,7 +8,7 @@ from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 
 from data_reader import load_communities_con, load_insurance, load_lsac, load_german, load_heart, \
-    load_communities_bi
+    load_communities_bi, load_synthetic
 from density_balance import DensityBalance
 from metrics import Metrics
 
@@ -18,7 +18,7 @@ class Experiment():
     def __init__(self, data="Community", regressor="Linear", balance="None", density_model="Neighbor"):
         datasets = {"Community": load_communities_bi, "Insurance": load_insurance,
                     "LSAC": load_lsac, "German": load_german,
-                    "Heart": load_heart, "Community_Con": load_communities_con}
+                    "Heart": load_heart, "Community_Con": load_communities_con, "Synthetic": load_synthetic}
         regressors = {"SVR": SVR(kernel="linear"), "Linear": LinearRegression(positive=True),
                       "Logistic": LogisticRegression(), "DT": DecisionTreeRegressor(max_depth=8),
                       "RF": RandomForestClassifier()}
@@ -57,7 +57,8 @@ class Experiment():
         numerical_preprocessor = StandardScaler()
         self.preprocessor = ColumnTransformer([
             ('OneHotEncoder', categorical_preprocessor, categorical_columns),
-            ('StandardScaler', numerical_preprocessor, numerical_columns)])
+            # ('StandardScaler', numerical_preprocessor, numerical_columns)
+        ], remainder='passthrough')
         self.preprocessor.fit(X)
 
     def test(self, X, y):
@@ -68,24 +69,32 @@ class Experiment():
             "MSE": m.mse(),
             # "RMSE": m.rmse(),
             # "MAE" : m.mae(),
-            # "R2": m.r2()
-            "Accuracy": m.accuracy(),
-            "F1": m.f1(),
+            "R2": m.r2(),
+            # "Accuracy": m.accuracy(),
+            # "F1": m.f1(),
         }
         for key in self.protected:
-            result["AOD_" + str(key)] = m.AOD(np.array(self.X_test[key]))
-            result["gAOD_" + str(key)] = m.gAOD(np.array(self.X_test[key]))
-            result["cAOD_" + str(key)] = m.cAOD(np.array(self.X_test[key]))
-
-            result["EOD_" + str(key)] = m.EOD(np.array(self.X_test[key]))
-            result["gEOD_" + str(key)] = m.gEOD(np.array(self.X_test[key]))
-            result["cEOD_" + str(key)] = m.cEOD(np.array(self.X_test[key]))
+            # acc_joint, acc_margin, ratio = m.r_sep(np.array(self.X_test[key]))
+            # result["Acc_joint_" + str(key)] = acc_joint
+            # result["Acc_margin_" + str(key)] = acc_margin
+            ratio = m.r_sep(np.array(self.X_test[key]))
+            ratio_a = m.r_sep_a(np.array(self.X_test[key]))
+            result["Ratio_" + str(key)] = ratio
+            # result["Ratio_a_" + str(key)] = ratio_a
+            # result["DP_" + str(key)] = m.DP(np.array(self.X_test[key]))
+            # result["AOD_" + str(key)] = m.AOD(np.array(self.X_test[key]))
+            # result["gAOD_" + str(key)] = m.gAOD(np.array(self.X_test[key]))
+            # result["cAOD_" + str(key)] = m.cAOD(np.array(self.X_test[key]))
+            #
+            # result["EOD_" + str(key)] = m.EOD(np.array(self.X_test[key]))
+            # result["gEOD_" + str(key)] = m.gEOD(np.array(self.X_test[key]))
+            # result["cEOD_" + str(key)] = m.cEOD(np.array(self.X_test[key]))
 
             # result["GDP_" + str(key)] = m.GDP(np.array(self.X_test[key]))
-            # result["DP_" + str(key)] = m.DP_disp(self.X_test[key], Theta)
+            result["DP_" + str(key)] = m.DP_disp(self.X_test[key], Theta)
             # result["BGL_mse_" + str(key)] = m.bgl_mse(self.X_test[key])
             # result["BGL_mae_" + str(key)] = m.bgl_mae(self.X_test[key])
-            # result["Con_Indi_" + str(key)] = m.convex_individual(self.X_test[key])
+            result["Con_Indi_" + str(key)] = m.convex_individual(self.X_test[key])
             # result["Con_Grp_" + str(key)] = m.convex_group(self.X_test[key])
         return result
 

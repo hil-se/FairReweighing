@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from sklearn.metrics import DistanceMetric
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import StandardScaler
@@ -26,3 +27,14 @@ class DensityNeighbor():
         X_z = scaler.fit_transform(X)
         dists = self.dist.pairwise(X_z)
         return np.sum(dists < self.radius, axis=1)
+
+
+class Reweighing():
+    def density(self, X):
+        w = []
+        X = X.tolist()
+        df = pd.DataFrame(X)
+        for index, row in df.iterrows():
+            row = list(row)
+            w.append(X.count(row) / len(X))
+        return np.array(w)

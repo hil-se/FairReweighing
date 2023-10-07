@@ -80,6 +80,19 @@ def insurance(density_model='Neighbor', repeat=30):
     df.to_csv("../result/" + data + "_" + density_model + ".csv", index=False)
 
 
+def synthetic(density_model='Neighbor', repeat=10):
+    data = "Synthetic"
+    regressor = "Linear"
+    treatments = ["None", "Reweighing", "GroundTruth"]
+    results = []
+    for treatment in treatments:
+        result = run(data=data, regressor=regressor, balance=treatment,
+                     density_model=density_model, repeat=repeat)
+        results.append(result)
+    df = pd.DataFrame(results)
+    df.to_csv("../result/" + data + "_" + density_model + ".csv", index=False)
+
+
 def run(data="Community", regressor="Linear", balance="Reweighing", density_model="Neighbor", repeat=30):
     runner = Experiment(data=data, regressor=regressor, density_model=density_model, balance=balance)
     results = []
