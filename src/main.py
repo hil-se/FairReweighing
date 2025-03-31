@@ -107,4 +107,4 @@ def run(data="Community", regressor="Linear", balance="Reweighing", density_mode
 
 
 if __name__ == "__main__":
-    eval(cmd())
+    community()

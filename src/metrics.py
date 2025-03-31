@@ -316,3 +316,14 @@ class Metrics:
             ratio = ratio + t
         ratio = ratio / len(s)
         return ratio
+
+    def bgl(self, s):
+        y0 = self.y[s == 0]
+        y1 = self.y[s == 1]
+        y0_pred = self.y_pred[s == 0]
+        y1_pred = self.y_pred[s == 1]
+
+        return max(sklearn.metrics.mean_squared_error(y0, y0_pred), sklearn.metrics.mean_squared_error(y1, y1_pred))
+        # return sklearn.metrics.mean_squared_error(y0, y0_pred)+ sklearn.metrics.mean_squared_error(y1, y1_pred)
+
+

@@ -69,7 +69,7 @@ class Experiment():
             "MSE": m.mse(),
             # "RMSE": m.rmse(),
             # "MAE" : m.mae(),
-            "R2": m.r2(),
+            # "R2": m.r2(),
             # "Accuracy": m.accuracy(),
             # "F1": m.f1(),
         }
@@ -77,9 +77,11 @@ class Experiment():
             # acc_joint, acc_margin, ratio = m.r_sep(np.array(self.X_test[key]))
             # result["Acc_joint_" + str(key)] = acc_joint
             # result["Acc_margin_" + str(key)] = acc_margin
-            ratio = m.r_sep(np.array(self.X_test[key]))
+            bgl = m.bgl(np.array(self.X_test[key]))
+            result["bgl_" + str(key)] = bgl
+            # ratio = m.r_sep(np.array(self.X_test[key]))
             ratio_a = m.r_sep_a(np.array(self.X_test[key]))
-            result["Ratio_" + str(key)] = ratio
+            # result["Ratio_" + str(key)] = ratio
             # result["Ratio_a_" + str(key)] = ratio_a
             # result["DP_" + str(key)] = m.DP(np.array(self.X_test[key]))
             # result["AOD_" + str(key)] = m.AOD(np.array(self.X_test[key]))
@@ -91,10 +93,10 @@ class Experiment():
             # result["cEOD_" + str(key)] = m.cEOD(np.array(self.X_test[key]))
 
             # result["GDP_" + str(key)] = m.GDP(np.array(self.X_test[key]))
-            result["DP_" + str(key)] = m.DP_disp(self.X_test[key], Theta)
+            # result["DP_" + str(key)] = m.DP_disp(self.X_test[key], Theta)
             # result["BGL_mse_" + str(key)] = m.bgl_mse(self.X_test[key])
             # result["BGL_mae_" + str(key)] = m.bgl_mae(self.X_test[key])
-            result["Con_Indi_" + str(key)] = m.convex_individual(self.X_test[key])
+            # result["Con_Indi_" + str(key)] = m.convex_individual(self.X_test[key])
             # result["Con_Grp_" + str(key)] = m.convex_group(self.X_test[key])
         return result
 
