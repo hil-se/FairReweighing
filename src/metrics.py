@@ -1,42 +1,26 @@
+import math
+
 import numpy as np
 import pandas as pd
 import sklearn.metrics
-from fairlearn.metrics import demographic_parity_difference
-from sklearn.linear_model import LogisticRegression
+from scipy.stats import norm, pearsonr, spearmanr
+from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from DP_helper import weighted_pmf, extract_group_pred, pmf2disp
+try:
+    from fairlearn.metrics import demographic_parity_difference
+except ImportError:
+    demographic_parity_difference = None
+
+from DP_helper import extract_group_pred, pmf2disp, weighted_pmf
+
+
+EPS = 1e-12
 
 
 class Metrics:
     def __init__(self, y, y_pred):
-        # y and y_pred are 1-d arrays of true values and predicted values
-        self.y = y
-        self.y_pred = y_pred
-
-    def DP(self, s):
-        dp = demographic_parity_difference(self.y,
-                                           self.y_pred,
-                                           sensitive_features=s)
-
-        return dp
-
-    # def bgl_mse(self, s):
-    #     s.name = "Sen"
-    #     mse_frame = MetricFrame(metrics=sklearn.metrics.mean_squared_error,
-    #                             y_true=self.y,
-    #                             y_pred=self.y_pred,
-    #                             sensitive_features=s)
-    #
-    #     return max(mse_frame.by_group)
-    #
-    # def bgl_mae(self, s):
-    #     s.name = "Sen"
-    #     mae_frame = MetricFrame(metrics=sklearn.metrics.mean_absolute_error,
-    #                             y_true=self.y,
-    #                             y_pred=self.y_pred,
-    #                             sensitive_features=s)
-    #
-    #     return max(mae_frame.by_group)
+        self.y = np.asarray(y)
+        self.y_pred = np.asarray(y_pred)
 
     def mse(self):
         return sklearn.metrics.mean_squared_error(self.y, self.y_pred)
@@ -45,285 +29,202 @@ class Metrics:
         return sklearn.metrics.mean_absolute_error(self.y, self.y_pred)
 
     def rmse(self):
-        return sklearn.metrics.mean_squared_error(self.y, self.y_pred, squared=False)
-
-    def accuracy(self):
-        return sklearn.metrics.accuracy_score(self.y, self.y_pred)
-
-    def f1(self):
-        return sklearn.metrics.f1_score(self.y, self.y_pred)
+        return math.sqrt(self.mse())
 
     def r2(self):
+        if len(np.unique(self.y)) <= 1:
+            return np.nan
         return sklearn.metrics.r2_score(self.y, self.y_pred)
 
+    def accuracy(self):
+        return sklearn.metrics.accuracy_score(self.y, self._class_predictions())
+
+    def f1(self):
+        return sklearn.metrics.f1_score(self.y, self._class_predictions(), zero_division=0)
+
+    def precision(self):
+        return sklearn.metrics.precision_score(self.y, self._class_predictions(), zero_division=0)
+
+    def recall(self):
+        return sklearn.metrics.recall_score(self.y, self._class_predictions(), zero_division=0)
+
+    def pearsonr_coefficient(self):
+        if len(np.unique(self.y)) <= 1 or len(np.unique(self.y_pred)) <= 1:
+            return np.nan
+        return pearsonr(self.y, self.y_pred)[0]
+
+    def spearmanr_coefficient(self):
+        if len(np.unique(self.y)) <= 1 or len(np.unique(self.y_pred)) <= 1:
+            return np.nan
+        return spearmanr(self.y, self.y_pred)[0]
+
+    def DP(self, s):
+        if demographic_parity_difference is None:
+            return np.nan
+        return demographic_parity_difference(self.y, self._class_predictions(), sensitive_features=s)
+
+    def EOD(self, s):
+        groups = _binary_groups(s)
+        if groups is None:
+            return np.nan
+        y0, y1, y0_pred, y1_pred = self._grouped(groups, s)
+        tp, fp, tn, fn = self.confusion(y0, y0_pred)
+        denom0 = tp + fn
+        tp, fp, tn, fn = self.confusion(y1, y1_pred)
+        denom1 = tp + fn
+        if denom0 == 0 or denom1 == 0:
+            return np.nan
+        return float(tp) / denom1 - float(self.confusion(y0, y0_pred)[0]) / denom0
+
+    def AOD(self, s):
+        groups = _binary_groups(s)
+        if groups is None:
+            return np.nan
+        y0, y1, y0_pred, y1_pred = self._grouped(groups, s)
+        tp, fp, tn, fn = self.confusion(y0, y0_pred)
+        if (tp + fn) == 0 or (fp + tn) == 0:
+            return np.nan
+        od0 = float(tp) / (tp + fn) + float(fp) / (fp + tn)
+        tp, fp, tn, fn = self.confusion(y1, y1_pred)
+        if (tp + fn) == 0 or (fp + tn) == 0:
+            return np.nan
+        od1 = float(tp) / (tp + fn) + float(fp) / (fp + tn)
+        return (od1 - od0) / 2
+
     def confusion(self, y, y_pred):
-        tp = 0
-        fp = 0
-        tn = 0
-        fn = 0
-        for i in range(len(y)):
-            if y[i] > 0:
-                if y_pred[i] > 0:
+        tp = fp = tn = fn = 0
+        for true, pred in zip(y, y_pred):
+            if true > 0:
+                if pred > 0:
                     tp += 1
                 else:
                     fn += 1
             else:
-                if y_pred[i] > 0:
+                if pred > 0:
                     fp += 1
                 else:
                     tn += 1
         return tp, fp, tn, fn
 
-    def EOD(self, s):
-        # True positive rate (TPR)
-        y0 = self.y[s == 0]
-        y0_pred = self.y_pred[s == 0]
-        y1 = self.y[s == 1]
-        y1_pred = self.y_pred[s == 1]
+    def bgl(self, s, n_bins=2):
+        groups = _groups_for_sensitive(s, n_bins=n_bins)
+        errors = []
+        for group in groups:
+            mask = group["mask"]
+            if mask.sum() > 0:
+                errors.append(sklearn.metrics.mean_squared_error(self.y[mask], self.y_pred[mask]))
+        return max(errors) if errors else np.nan
 
-        tp, fp, tn, fn = self.confusion(y0, y0_pred)
-        op0 = float(tp) / (tp + fn)
-        tp, fp, tn, fn = self.confusion(y1, y1_pred)
-        op1 = float(tp) / (tp + fn)
-        return op1 - op0
+    def continuous_mi(self, s):
+        s = np.asarray(s, dtype=float)
+        if len(np.unique(s)) <= 1:
+            return 0.0
+        joint = pd.DataFrame({"y": self.y, "y_pred": self.y_pred}, columns=["y", "y_pred"])
+        margin = self.y.reshape(-1, 1)
 
-    def AOD(self, s):
-        # equal TPR and equal FPR
-        y0 = self.y[s == 0]
-        y0_pred = self.y_pred[s == 0]
-        y1 = self.y[s == 1]
-        y1_pred = self.y_pred[s == 1]
+        model_joint = LinearRegression().fit(joint, s)
+        model_margin = LinearRegression().fit(margin, s)
+        pred_joint = model_joint.predict(joint)
+        pred_margin = model_margin.predict(margin)
 
-        tp, fp, tn, fn = self.confusion(y0, y0_pred)
-        od0 = float(tp) / (tp + fn) + float(fp) / (fp + tn)
-        tp, fp, tn, fn = self.confusion(y1, y1_pred)
-        od1 = float(tp) / (tp + fn) + float(fp) / (fp + tn)
-        return (od1 - od0) / 2
+        rse_joint = max(np.std(pred_joint - s), EPS)
+        rse_margin = max(np.std(pred_margin - s), EPS)
+        pdf_joint = np.maximum(norm.pdf(s, pred_joint, rse_joint), EPS)
+        pdf_margin = np.maximum(norm.pdf(s, pred_margin, rse_margin), EPS)
+        return float(np.mean(np.log(pdf_joint / pdf_margin)))
 
-    def within_diff(self, s):
-        y0 = self.y[s == 0]
-        y0_pred = self.y_pred[s == 0]
-        y1 = self.y[s == 1]
-        y1_pred = self.y_pred[s == 1]
-        tpr0 = self.pairwise_tpr(y0, y0, y0_pred, y0_pred)
-        tpr1 = self.pairwise_tpr(y1, y1, y1_pred, y1_pred)
-        fpr0 = self.pairwise_fpr(y0, y0, y0_pred, y0_pred)
-        fpr1 = self.pairwise_fpr(y1, y1, y1_pred, y1_pred)
-        return ((tpr1 - fpr1) - (tpr0 - fpr0)) / 2
+    def continuous_mi_normalized(self, s):
+        s = np.asarray(s, dtype=float)
+        if len(np.unique(s)) <= 1:
+            return 0.0
+        margin = self.y.reshape(-1, 1)
+        model_margin = LinearRegression().fit(margin, s)
+        pred_margin = model_margin.predict(margin)
+        rse_margin = max(np.std(pred_margin - s), EPS)
+        pdf_margin = np.maximum(norm.pdf(s, pred_margin, rse_margin), EPS)
+        entropy_proxy = -float(np.mean(np.log(pdf_margin)))
+        if abs(entropy_proxy) < EPS:
+            return np.nan
+        return self.continuous_mi(s) / entropy_proxy
 
-    def within_diff_c(self, s):
-        y0 = self.y[s == 0]
-        y0_pred = self.y_pred[s == 0]
-        y1 = self.y[s == 1]
-        y1_pred = self.y_pred[s == 1]
-        tpr0 = self.pairwise_tpr_c(y0, y0, y0_pred, y0_pred)
-        tpr1 = self.pairwise_tpr_c(y1, y1, y1_pred, y1_pred)
-        fpr0 = self.pairwise_fpr_c(y0, y0, y0_pred, y0_pred)
-        fpr1 = self.pairwise_fpr_c(y1, y1, y1_pred, y1_pred)
-        return ((tpr1 - fpr1) - (tpr0 - fpr0)) / 2
+    def r_sep(self, s):
+        groups = _binary_groups(s)
+        if groups is None:
+            return np.nan
+        s = np.asarray(s)
+        joint = pd.DataFrame({"y": self.y, "y_pred": self.y_pred}, columns=["y", "y_pred"])
+        margin = self.y.reshape(-1, 1)
+        try:
+            model_joint = LogisticRegression(max_iter=1000).fit(joint, s)
+            model_margin = LogisticRegression(max_iter=1000).fit(margin, s)
+        except ValueError:
+            return np.nan
 
-    def pairwise_tpr(self, y0, y1, y0_pred, y1_pred):
-        t = 0
-        tp = 0
-        for i in range(len(y0)):
-            for j in range(len(y1)):
-                if y0[i] > y1[j]:
-                    t += 1
-                    if y0_pred[i] > y1_pred[j]:
-                        tp += 1
-        return float(tp) / t
+        prob_joint = np.clip(model_joint.predict_proba(joint)[:, 1], EPS, 1 - EPS)
+        prob_margin = np.clip(model_margin.predict_proba(margin)[:, 1], EPS, 1 - EPS)
+        ratio = (prob_joint / (1 - prob_joint)) * ((1 - prob_margin) / prob_margin)
+        return float(np.mean(ratio))
 
-    def pairwise_fpr(self, y0, y1, y0_pred, y1_pred):
-        n = 0
-        fp = 0
-        for i in range(len(y0)):
-            for j in range(len(y1)):
-                if y0[i] < y1[j]:
-                    n += 1
-                    if y0_pred[i] > y1_pred[j]:
-                        fp += 1
-        return float(fp) / n
-
-    def pairwise_tpr_c(self, y0, y1, y0_pred, y1_pred):
-        t = 0
-        tp = 0
-        for i in range(len(y0)):
-            for j in range(len(y1)):
-                if y0[i] > y1[j]:
-                    t += (y0[i] - y1[j]) ** 2
-                    if y0_pred[i] > y1_pred[j]:
-                        tp += (y0_pred[i] - y1_pred[j]) * (y0[i] - y1[j])
-        return float(tp) / t
-
-    def pairwise_fpr_c(self, y0, y1, y0_pred, y1_pred):
-        n = 0
-        fp = 0
-        for i in range(len(y0)):
-            for j in range(len(y1)):
-                if y0[i] < y1[j]:
-                    n += (y1[j] - y0[i]) ** 2
-                    if y0_pred[i] > y1_pred[j]:
-                        fp += (y0_pred[i] - y1_pred[j]) * (y1[j] - y0[i])
-        return float(fp) / n
-
-    def gAOD(self, s):
-        # s is an array of numerical values of a sensitive attribute
-        t = n = tp = fp = tn = fn = 0
-        for i in range(len(self.y)):
-            for j in range(len(self.y)):
-                if s[i] - s[j] > 0:
-                    if self.y[i] - self.y[j] > 0:
-                        t += 1
-                        if self.y_pred[i] > self.y_pred[j]:
-                            tp += 1
-                        if self.y_pred[i] < self.y_pred[j]:
-                            fn += 1
-                    elif self.y[j] - self.y[i] > 0:
-                        n += 1
-                        if self.y_pred[i] > self.y_pred[j]:
-                            fp += 1
-                        elif self.y_pred[i] < self.y_pred[j]:
-                            tn += 1
-
-        tpr = tp / t
-        tnr = tn / n
-        fpr = fp / n
-        fnr = fn / t
-        aod = (tpr + fpr - tnr - fnr) / 2
-        return aod
-
-    def gEOD(self, s):
-        # s is an array of numerical values of a sensitive attribute
-        return self.gAOD(s) + self.within_diff(s)
-
-    def cEOD(self, s):
-        # s is an array of numerical values of a sensitive attribute
-        return self.cAOD(s) + self.within_diff_c(s)
-
-    def cAOD(self, s):
-        # s is an array of numerical values of a sensitive attribute
-        t = n = tp = fp = 0.0
-        for i in range(len(self.y)):
-            for j in range(len(self.y)):
-                if s[i] - s[j] > 0:
-                    y_diff = self.y[i] - self.y[j]
-                    y_pred_diff = self.y_pred[i] - self.y_pred[j]
-                    if y_diff > 0:
-                        t += y_diff
-                        tp += y_pred_diff
-                    elif y_diff < 0:
-                        n += y_diff
-                        fp += y_pred_diff
-
-        aod = (tp / t - fp / n) / 2
-        return aod
+    def r_sep_a(self, s):
+        groups = _binary_groups(s)
+        if groups is None:
+            return np.nan
+        joint = pd.DataFrame({"y": self.y, "y_pred": self.y_pred}, columns=["y", "y_pred"])
+        try:
+            prob_joint = LogisticRegression(max_iter=1000).fit(joint, s).predict_proba(joint)[:, 1]
+        except ValueError:
+            return np.nan
+        prob_joint = np.clip(prob_joint, EPS, 1 - EPS)
+        return float(np.mean(prob_joint / (1 - prob_joint)))
 
     def DP_disp(self, s, Theta):
         pred_group = extract_group_pred(self.y_pred, s)
-        PMF_all = weighted_pmf(self.y_pred, Theta)
-        PMF_group = [weighted_pmf(pred_group[g], Theta) for g in pred_group]
-        DP_disp = max([pmf2disp(PMF_g, PMF_all) for PMF_g in PMF_group])
-        return DP_disp
+        pmf_all = weighted_pmf(self.y_pred, Theta)
+        pmf_group = [weighted_pmf(pred_group[g], Theta) for g in pred_group]
+        return max([pmf2disp(pmf_g, pmf_all) for pmf_g in pmf_group])
 
-    # def GDP(self, s):
-    #     test_sol = 1e-3
-    #     device_gpu = torch.device("mps")
-    #     x_appro = torch.arange(test_sol, 1 - test_sol, test_sol).to(device_gpu)
-    #     KDE_FAIR = kde_fair(x_appro)
-    #     penalty = KDE_FAIR.forward
-    #     y_pred = torch.tensor(self.y_pred.astype(np.float32)).to(device_gpu)
-    #     s = torch.tensor(s.astype(np.float32)).to(device_gpu)
-    #     DP_test = penalty(y_pred, s, device_gpu).item()
-    #
-    #     return DP_test
+    def fairness_summary(self, s, prefix):
+        s = np.asarray(s)
+        summary = {
+            f"bgl_{prefix}": self.bgl(s),
+            f"continuous_mi_{prefix}": self.continuous_mi(s),
+            f"continuous_mi_norm_{prefix}": self.continuous_mi_normalized(s),
+            f"r_sep_{prefix}": self.r_sep(s),
+        }
+        if _is_binary_target(self.y):
+            summary.update({
+                f"dp_{prefix}": self.DP(s),
+                f"aod_{prefix}": self.AOD(s),
+                f"eod_{prefix}": self.EOD(s),
+            })
+        return summary
 
-    def convex_individual(self, s):
-        y0 = self.y[s == 0]
-        y1 = self.y[s == 1]
-        y0_pred = self.y_pred[s == 0]
-        y1_pred = self.y_pred[s == 1]
+    def _class_predictions(self):
+        if _is_binary_target(self.y):
+            labels = np.sort(np.unique(self.y))
+            return np.where(self.y_pred >= 0.5, labels[-1], labels[0])
+        return np.rint(self.y_pred)
 
-        def convex_ind(y0, y1, y0_pred, y1_pred):
-            if isinstance(y0, float):
-                d = np.exp(-(y0 - y1) ** 2)
-            else:
-                d = 1 if y0 == y1 else 0
-            return (y0_pred - y1_pred) ** 2 * d
-
-        error = 0
-        for i in range(len(y0)):
-            for j in range(len(y1)):
-                error += convex_ind(y0[i], y1[j], y0_pred[i], y1_pred[j])
-        error = float(error) / len(y0) / len(y1)
-        return error
-
-    def convex_group(self, s):
-        y0 = self.y[s == 0]
-        y1 = self.y[s == 1]
-        y0_pred = self.y_pred[s == 0]
-        y1_pred = self.y_pred[s == 1]
-
-        def convex_grp(y0, y1, y0_pred, y1_pred):
-            if isinstance(y0, float):
-                d = np.exp(-(y0 - y1) ** 2)
-            else:
-                d = 1 if y0 == y1 else 0
-            return (y0_pred - y1_pred) * d
-
-        error = 0
-        for i in range(len(y0)):
-            for j in range(len(y1)):
-                error += convex_grp(y0[i], y1[j], y0_pred[i], y1_pred[j])
-        error = float(error) / len(y0) / len(y1)
-        return error ** 2
-
-    def r_sep(self, s):
-
-        joint = pd.DataFrame({'y': self.y, 'y_pred': self.y_pred}, columns=['y', 'y_pred'])
-        margin = self.y.reshape(-1, 1)
-        model_joint = LogisticRegression().fit(joint, s)
-        model_margin = LogisticRegression().fit(margin, s)
-
-        acc_joint = model_joint.score(joint, s)
-        acc_margin = model_margin.score(margin, s)
-
-        prob_joint = model_joint.predict_proba(joint)[:, 1]
-        prob_margin = model_margin.predict_proba(margin)[:, 1]
-        ratio = 0
-
-        for i in range(len(s)):
-            t = (prob_joint[i] / (1 - prob_joint[i])) * ((1 - prob_margin[i]) / prob_margin[i])
-            ratio = ratio + t
-        ratio = ratio / len(s)
-        return ratio
-
-    def r_sep_a(self, s):
-
-        joint = pd.DataFrame({'y': self.y, 'y_pred': self.y_pred}, columns=['y', 'y_pred'])
-        margin = self.y.reshape(-1, 1)
-        model_joint = LogisticRegression().fit(joint, s)
-        model_margin = LogisticRegression().fit(margin, s)
-
-        acc_joint = model_joint.score(joint, s)
-        acc_margin = model_margin.score(margin, s)
-
-        prob_joint = model_joint.predict_proba(joint)[:, 1]
-        prob_margin = model_margin.predict_proba(margin)[:, 1]
-        ratio = 0
-
-        for i in range(len(s)):
-            t = prob_joint[i] / (1 - prob_joint[i])
-            ratio = ratio + t
-        ratio = ratio / len(s)
-        return ratio
-
-    def bgl(self, s):
-        y0 = self.y[s == 0]
-        y1 = self.y[s == 1]
-        y0_pred = self.y_pred[s == 0]
-        y1_pred = self.y_pred[s == 1]
-
-        return max(sklearn.metrics.mean_squared_error(y0, y0_pred), sklearn.metrics.mean_squared_error(y1, y1_pred))
-        # return sklearn.metrics.mean_squared_error(y0, y0_pred)+ sklearn.metrics.mean_squared_error(y1, y1_pred)
+    def _grouped(self, groups, s):
+        s = np.asarray(s)
+        mask0 = s == groups[0]
+        mask1 = s == groups[1]
+        return self.y[mask0], self.y[mask1], self._class_predictions()[mask0], self._class_predictions()[mask1]
 
 
+def _is_binary_target(y):
+    return len(np.unique(y)) == 2
+
+
+def _binary_groups(s):
+    unique = np.unique(np.asarray(s))
+    return unique if len(unique) == 2 else None
+
+
+def _groups_for_sensitive(s, n_bins=2):
+    s = np.asarray(s)
+    unique = np.unique(s)
+    if len(unique) <= 10:
+        return [{"label": value, "mask": s == value} for value in unique]
+    bins = pd.qcut(pd.Series(s), q=n_bins, labels=False, duplicates="drop")
+    return [{"label": value, "mask": bins.to_numpy() == value} for value in np.unique(bins.dropna())]

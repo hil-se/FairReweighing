@@ -1,44 +1,139 @@
 import numpy as np
+import pandas as pd
 from scipy.stats import bernoulli, norm
 
 from density_est import DensityKernel, DensityNeighbor, Reweighing
 
 
-class DensityBalance():
-    def __init__(self, model='Neighbor'):
-        models = {'Neighbor': DensityNeighbor(), "Kernel": DensityKernel(), 'Reweighing': Reweighing()}
-        self.model = models[model]
+EPS = 1e-12
 
-    def weight(self, A, y, treatment="FairBalance"):
-        X = np.concatenate((A, y), axis=1)
 
-        w = self.model.density(X)
-        wA = self.model.density(A)
-        wy = self.model.density(y)
+class DensityBalance:
+    def __init__(
+        self,
+        model="Neighbor",
+        radius=0.5,
+        bandwidth=0.2,
+        kernel="gaussian",
+        distance="euclidean",
+        n_bins=5,
+    ):
+        model_key = _normalize_model(model)
+        models = {
+            "Neighbor": DensityNeighbor(radius=radius, distance=distance),
+            "Kernel": DensityKernel(kernel=kernel, bandwidth=bandwidth),
+            "Reweighing": Reweighing(),
+        }
+        self.model_name = model_key
+        self.model = models[model_key]
+        self.n_bins = n_bins
 
+    def weight(self, A, y, treatment="FairReweighing"):
+        treatment_key = _normalize_treatment(treatment)
+        A = _as_2d(A)
+        y = _as_2d(y)
+
+        if treatment_key == "none":
+            return None
+        if treatment_key == "groundtruth":
+            return self._synthetic_ground_truth_weight(A, y)
+        if treatment_key == "discretized-reweighing":
+            A = _discretize_frame(A, self.n_bins)
+            y = _discretize_frame(y, self.n_bins)
+            density = Reweighing()
+            return _ratio_weight(density, A, y)
+        if treatment_key == "fairbalancevariant":
+            return _normalize_weight(1.0 / np.maximum(self.model.density(np.concatenate((A, y), axis=1)), EPS))
+        if treatment_key == "fairbalance":
+            joint = np.concatenate((A, y), axis=1)
+            return _normalize_weight(self.model.density(A) / np.maximum(self.model.density(joint), EPS))
+        if treatment_key == "groupbalance":
+            joint = np.concatenate((A, y), axis=1)
+            return _normalize_weight(self.model.density(y) / np.maximum(self.model.density(joint), EPS))
+
+        return _ratio_weight(self.model, A, y)
+
+    def _synthetic_ground_truth_weight(self, A, y):
+        A = A.astype(float)
+        y = y.astype(float)
         wA_true = bernoulli.pmf(A, 0.7).flatten()
-        wy_true = y.copy().flatten()
-        w_true = y.copy().flatten()
+        wy_true = np.zeros(len(y))
+        w_true = np.zeros(len(y))
 
-        for i in range(A.size):
-            wy_true[i] = norm.pdf(y[i][0], 2.35, 0.21) * 0.7 + norm.pdf(y[i][0], 2.15, 0.14) * 0.3
-
-        for i in range(A.size):
-            if A[i] == 1:
-                w_true[i] = norm.pdf(y[i][0], 2.35, 0.21) * 0.7
+        for i in range(len(y)):
+            yi = y[i][0]
+            wy_true[i] = norm.pdf(yi, 2.35, 0.21) * 0.7 + norm.pdf(yi, 2.15, 0.14) * 0.3
+            if A[i][0] == 1:
+                w_true[i] = norm.pdf(yi, 2.35, 0.21) * 0.7
             else:
-                w_true[i] = norm.pdf(y[i][0], 2.15, 0.14) * 0.3
+                w_true[i] = norm.pdf(yi, 2.15, 0.14) * 0.3
 
-        if treatment == "FairBalanceVariant":
-            weight = 1 / w
-        elif treatment == "FairBalance":
-            weight = wA / w
-        elif treatment == "GroupBalance":
-            weight = wy / w
-        elif treatment == "Reweighing":
-            weight = wA * wy / w
-        else:
-            weight = wA_true * wy_true / w_true
+        return _normalize_weight(wA_true * wy_true / np.maximum(w_true, EPS))
 
-        weight = (len(weight) * weight / sum(weight)).flatten()
-        return weight
+
+def _ratio_weight(model, A, y):
+    joint = np.concatenate((A, y), axis=1)
+    w_joint = np.maximum(model.density(joint), EPS)
+    w_a = model.density(A)
+    w_y = model.density(y)
+    return _normalize_weight(w_a * w_y / w_joint)
+
+
+def _normalize_weight(weight):
+    weight = np.asarray(weight, dtype=float).flatten()
+    weight = np.nan_to_num(weight, nan=1.0, posinf=np.nanmax(weight[np.isfinite(weight)]) if np.isfinite(weight).any() else 1.0)
+    total = weight.sum()
+    if not np.isfinite(total) or total <= 0:
+        return np.ones(len(weight))
+    return len(weight) * weight / total
+
+
+def _as_2d(values):
+    arr = np.asarray(values)
+    if arr.ndim == 1:
+        arr = arr.reshape(-1, 1)
+    return arr
+
+
+def _discretize_frame(values, n_bins):
+    frame = pd.DataFrame(_as_2d(values))
+    for column in frame:
+        if frame[column].nunique(dropna=False) > n_bins:
+            frame[column] = pd.qcut(frame[column], q=n_bins, labels=False, duplicates="drop")
+    return frame.fillna(-1).to_numpy()
+
+
+def _normalize_model(model):
+    aliases = {
+        None: "Neighbor",
+        "neighbor": "Neighbor",
+        "neighbors": "Neighbor",
+        "kernel": "Kernel",
+        "kde": "Kernel",
+        "reweighing": "Reweighing",
+        "discrete": "Reweighing",
+    }
+    key = aliases.get(str(model).lower() if model is not None else None)
+    if key is None:
+        raise ValueError(f"Unknown density model: {model}")
+    return key
+
+
+def _normalize_treatment(treatment):
+    aliases = {
+        "none": "none",
+        "fairreweighing": "fair-reweighing",
+        "fair-reweighing": "fair-reweighing",
+        "reweighing": "fair-reweighing",
+        "discretized": "discretized-reweighing",
+        "discretized-reweighing": "discretized-reweighing",
+        "original-reweighing": "discretized-reweighing",
+        "groundtruth": "groundtruth",
+        "fairbalancevariant": "fairbalancevariant",
+        "fairbalance": "fairbalance",
+        "groupbalance": "groupbalance",
+    }
+    key = aliases.get(str(treatment).replace("_", "-").lower())
+    if key is None:
+        raise ValueError(f"Unknown treatment: {treatment}")
+    return key

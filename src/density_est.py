@@ -1,40 +1,42 @@
 import numpy as np
 import pandas as pd
-from sklearn.metrics import DistanceMetric
+from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import StandardScaler
 
 
-class DensityKernel():
-    def __init__(self, kernel='gaussian', bandwidth=0.2):
-        self.kde = KernelDensity(kernel=kernel, bandwidth=bandwidth)
+class DensityKernel:
+    def __init__(self, kernel="gaussian", bandwidth=0.2):
+        self.kernel = kernel
+        self.bandwidth = bandwidth
 
     def density(self, X):
-        scaler = StandardScaler()
-        X_z = scaler.fit_transform(X)
-        self.kde.fit(X_z)
-        w = np.exp(self.kde.score_samples(X_z))
-        return w
+        X_z = _standardize(X)
+        kde = KernelDensity(kernel=self.kernel, bandwidth=self.bandwidth)
+        kde.fit(X_z)
+        return np.exp(kde.score_samples(X_z))
 
 
-class DensityNeighbor():
-    def __init__(self, radius=0.5, distance='euclidean'):
+class DensityNeighbor:
+    def __init__(self, radius=0.5, distance="euclidean"):
         self.radius = radius
-        self.dist = DistanceMetric.get_metric(distance)
+        self.distance = distance
 
     def density(self, X):
-        scaler = StandardScaler()
-        X_z = scaler.fit_transform(X)
-        dists = self.dist.pairwise(X_z)
-        return np.sum(dists < self.radius, axis=1)
+        X_z = _standardize(X)
+        dists = pairwise_distances(X_z, metric=self.distance)
+        return np.sum(dists < self.radius, axis=1).astype(float)
 
 
-class Reweighing():
+class Reweighing:
     def density(self, X):
-        w = []
-        X = X.tolist()
-        df = pd.DataFrame(X)
-        for index, row in df.iterrows():
-            row = list(row)
-            w.append(X.count(row) / len(X))
-        return np.array(w)
+        rows = pd.DataFrame(np.asarray(X)).astype(str).agg("|".join, axis=1)
+        counts = rows.map(rows.value_counts())
+        return counts.to_numpy(dtype=float) / len(rows)
+
+
+def _standardize(X):
+    X = np.asarray(X)
+    if X.ndim == 1:
+        X = X.reshape(-1, 1)
+    return StandardScaler().fit_transform(X)
