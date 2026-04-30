@@ -1,8 +1,9 @@
 # Reviewer Response Matrix
 
-This matrix is an internal checklist for the JAIR revision. The manuscript source
-is outside this repository, so manuscript-only fixes are tracked here while code
-and artifact changes are implemented in this repo.
+This matrix is an internal checklist for the JAIR revision. The current
+manuscript draft is `docs/EMSE2025.tex`; code and artifact changes are
+implemented in the repository, while long-running result regeneration remains a
+separate execution step.
 
 | Review concern | Response type | Concrete fix |
 | --- | --- | --- |
@@ -26,6 +27,7 @@ and artifact changes are implemented in this repo.
 
 ## Remaining manuscript-only tasks
 
-- Rewrite Introduction, Related Work, Method intuition, Discussion, and Threats to Validity in the LaTeX source.
+- Replace placeholder legacy result tables with regenerated tables/figures after the full experiment grid completes.
 - Add tables/figures from the new CSV artifacts once long-running experiments complete.
 - Avoid unsupported "state-of-the-art superiority" claims unless statistical tests support them.
+- Keep the BibTeX entries in `docs/references_to_add.bib` synchronized with `docs/mybib.bib` if the manuscript bibliography is maintained outside this repository.

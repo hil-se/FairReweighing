@@ -1,0 +1,822 @@
+%%%%%%%%%%%%%%%%%%%%%%% file template.tex %%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% This is a general template file for the LaTeX package SVJour3
+% for Springer journals.          Springer Heidelberg 2010/09/16
+%
+% Copy it to a new file with a new name and use it as the basis
+% for your article. Delete % signs as needed.
+%
+% This template includes a few options for different layouts and
+% content for various journals. Please consult a previous issue of
+% your journal as needed.
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% First comes an example EPS file -- just ignore it and
+% proceed on the \documentclass line
+% your LaTeX will extract the file if required
+\begin{filecontents*}{example.eps}
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 19 19 221 221
+%%CreationDate: Mon Sep 29 1997
+%%Creator: programmed by hand (JK)
+%%EndComments
+gsave
+newpath
+  20 20 moveto
+  20 220 lineto
+  220 220 lineto
+  220 20 lineto
+closepath
+2 setlinewidth
+gsave
+  .4 setgray fill
+grestore
+stroke
+grestore
+\end{filecontents*}
+%
+\RequirePackage{fix-cm}
+%
+%\documentclass{svjour3}                     % onecolumn (standard format)
+%\documentclass[smallcondensed]{svjour3}     % onecolumn (ditto)
+\documentclass[smallextended]{svjour3}       % onecolumn (second format)
+%\documentclass[twocolumn]{svjour3}          % twocolumn
+%
+\smartqed  % flush right qed marks, e.g. at end of proof
+%
+\usepackage{graphicx}
+
+\usepackage{times}
+\usepackage{soul}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage[small]{caption}
+\usepackage{graphicx}
+\usepackage{amsmath}
+% \usepackage{amsthm} 
+\usepackage{booktabs}
+% \usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage[switch]{lineno}
+
+\usepackage[table]{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=*}
+\setlist[enumerate]{leftmargin=*}
+
+\newcommand{\br}{\color{blue}}
+\newcommand{\er}{\color{black}}
+
+\newcommand{\bi}{\begin{itemize}}
+\newcommand{\ei}{\end{itemize}}
+\newcommand{\be}{\begin{enumerate}}
+\newcommand{\ee}{\end{enumerate}}
+
+\usepackage[linesnumbered,ruled,vlined]{algorithm2e}
+\usepackage{amsfonts} 
+\newtheorem{hypothesis}{Hypothesis}
+\newtheorem{assumption}{Assumption}
+\newcommand\independent{\protect\mathpalette{\protect\independenT}{\perp}}
+\def\independenT#1#2{\mathrel{\rlap{$#1#2$}\mkern2mu{#1#2}}}
+
+\usepackage[skins]{tcolorbox}
+
+
+\newenvironment{RQ}{\vspace{2mm}\begin{tcolorbox}[enhanced,width=\linewidth,size=fbox,colback=blue!5,drop shadow southeast,sharp corners]}{\end{tcolorbox}}
+%
+% \usepackage{mathptmx}      % use Times fonts if available on your TeX system
+%
+% insert here the call for the packages your document requires
+%\usepackage{latexsym}
+% etc.
+%
+% please place your own definitions here and don't use \def but
+% \newcommand{}{}
+%
+% Insert the name of "your journal" with
+% \journalname{myjournal}
+%
+\begin{document}
+
+\title{FairReweighing: Density Estimation-Based Reweighing Framework for Improving Separation in Fair Regression%\thanks{Grants or other notes
+%about the article that should go on the front page should be
+%placed here. General acknowledgments should be placed at the end of the article.}
+}
+% \subtitle{Do you have a subtitle?\\ If so, write it here}
+
+\titlerunning{FairReweighing for Fair Regression}        % if too long for running head
+
+\author{Xiaoyin Xi         \and
+        Zhe Yu %etc.
+}
+
+%\authorrunning{Short form of author list} % if too long for running head
+
+\institute{Xiaoyin Xi \at
+              Rochester Institute of Technology \\
+              Rochester, New York\\
+              \email{xx4455@rit.edu}           %  \\
+%             \emph{Present address:} of F. Author  %  if needed
+           \and
+           Zhe Yu \at
+              Rochester Institute of Technology \\
+              Rochester, New York\\
+              \email{zxyvse@rit.edu}
+}
+
+\date{Received: date / Accepted: date}
+% The correct dates will be entered by the editor
+
+
+\maketitle
+
+\begin{abstract}
+Many consequential machine learning systems make continuous predictions: insurance premiums, credit limits, risk scores, educational outcomes, and human ratings are all naturally modeled as regression tasks rather than binary decisions. Fairness in such settings is less mature than fairness in classification because both the target variable and the sensitive attribute may be continuous, making direct frequency-based fairness measurement and mitigation difficult. This paper studies separation for fair regression. We extend a mutual information-based separation metric so that it can evaluate violations when sensitive attributes are binary, categorical, or continuous. We then propose \emph{FairReweighing}, a density estimation-based pre-processing method that generalizes the classic Reweighing algorithm from classification to regression by weighting samples according to the discrepancy between the observed joint density of sensitive attributes and labels and the product of their marginal densities. Theoretically, we show that FairReweighing guarantees separation on the weighted training distribution under a conditional independence assumption. Empirically, we evaluate FairReweighing under a unified protocol across synthetic, tabular, classification-reduction, and image-derived regression datasets, including SCUT-FBP5500, with repeated runs, confidence intervals, statistical tests, sensitivity analysis, and runtime measurements. The results characterize when FairReweighing improves separation while preserving predictive accuracy, and clarify that in pure classification settings it reduces to the original Reweighing method rather than constituting a separate classification contribution.
+\keywords{Algorithmic Fairness \and Fair Regression \and Data Pre-processing \and Density Estimation} 
+% \PACS{PACS code1 \and PACS code2 \and more}
+% \subclass{MSC code1 \and MSC code2 \and more}
+\end{abstract}
+
+
+\section{Introduction}
+Many algorithmic decisions are not binary decisions but continuous estimates. A lender may predict a credit limit rather than merely approve or deny an application; an insurer may estimate a premium rather than assign a yes/no outcome; a school, employer, or public agency may rank applicants using predicted scores; and image-based systems may estimate age, facial ratings, or risk values. These regression outputs can still affect access to resources and opportunities. If prediction errors or score distributions systematically depend on sensitive attributes such as race, sex, or age after conditioning on the true outcome, the model can create unfair burdens even when it is accurate on average.
+
+Fairness in regression is therefore a central problem for fair machine learning, but it remains less developed than fairness in classification \cite{berk2017convex}. In classification, equalized odds requires that the true positive and false positive rates are equal across sensitive groups \cite{hardt2016equality}. Its more general form is \emph{separation}, which requires predictions to be conditionally independent of sensitive attributes given the true label:
+\begin{equation}
+\hat{Y} \perp A \mid Y.
+\end{equation}
+Separation is attractive for regression because it permits different outcome distributions across groups while still requiring the model's residual predictive behavior to avoid dependence on sensitive attributes. However, measuring and enforcing this criterion becomes difficult when $Y$, $\hat{Y}$, or $A$ are continuous. Frequency counts used by classification methods are no longer adequate because the same target or sensitive-attribute value may occur only once.
+
+Existing fair-regression work has developed demographic-parity, bounded-group-loss, individual-fairness, and pairwise fairness formulations \cite{berk2017convex,agarwal2019fair,jiang2022generalized,narasimhan2020pairwise}. Steinberg et al.~\cite{steinberg2020fairness} proposed density-ratio and mutual-information approximations for separation in regression, but those formulations assume discrete sensitive attributes. This leaves an important gap: many regression datasets contain continuous sensitive attributes, such as age, income, racial composition percentages, or other demographic proportions. A fair-regression method should also support multiple sensitive attributes without requiring a hand-crafted discretization that may change the fairness conclusion.
+
+This paper addresses that gap. We extend a mutual information-based separation metric so that it can evaluate separation violations with binary, categorical, and continuous sensitive attributes. We then propose \emph{FairReweighing}, a density estimation-based pre-processing method for fair regression. The method generalizes the classic Reweighing algorithm of Kamiran and Calders \cite{kamiran12}: each training sample receives a weight proportional to the product of the marginal densities of its sensitive attribute and label, divided by their observed joint density. Intuitively, samples from over-represented $(A,Y)$ regions are down-weighted and samples from under-represented regions are up-weighted, so the learner sees a weighted training distribution where $A$ and $Y$ are balanced with respect to separation.
+
+The contribution boundary is important. In pure classification settings with discrete labels and discrete sensitive attributes, FairReweighing reduces to the original Reweighing method. We use classification experiments only to validate this reduction and the consistency of the proposed metric; we do not claim a new classification mitigation algorithm. The novel contribution is the extension to regression and continuous sensitive attributes through density estimation.
+
+We evaluate the following research questions:
+
+\begin{itemize}
+  \item \textbf{RQ1:} Does the continuous mutual information estimator agree with established separation metrics when those metrics are applicable, and can it evaluate separation with continuous sensitive attributes?
+  \item \textbf{RQ2:} How does \emph{FairReweighing} affect the fairness-accuracy tradeoff in regression across datasets, models, density estimators, and hyperparameters?
+  \item \textbf{RQ3:} In classification settings, does \emph{FairReweighing} reduce to the original \emph{Reweighing} algorithm?
+  \item \textbf{RQ4:} How does \emph{FairReweighing} behave when optimizing separation for multiple sensitive attributes simultaneously?
+\end{itemize}
+
+Our major contributions are as follows:
+\begin{itemize}
+  \item We extend conditional mutual-information estimation for separation to continuous sensitive attributes, enabling fairness evaluation in both regression and classification settings.
+  \item We propose \emph{FairReweighing}, a density estimation-based pre-processing method that generalizes Reweighing from classification to regression.
+  \item We prove that, under a conditional independence assumption, FairReweighing satisfies separation on the weighted training distribution.
+  \item We provide a unified empirical protocol with repeated runs, confidence intervals, paired statistical tests, model diversity, sensitivity analysis, runtime measurements, and a larger image-derived regression dataset, SCUT-FBP5500.
+  \item We release a reproducible experiment package that regenerates the result tables and artifacts used in the study.
+\end{itemize}
+The rest of this paper is structured as follows. Section~\ref{sect:Related Work} reviews fairness notions, fair regression methods, and related work on distribution shift. Section~\ref{sec:methodology} introduces the continuous mutual information metric and the FairReweighing algorithm. Section~\ref{sect:Experiments} presents the experimental protocol and results. Section~\ref{sect:Discussion} discusses practical implications and limitations. Section~\ref{threats} discusses threats to validity, and Section~\ref{sect:Conclusion} concludes.
+
+\section{Related Work}
+\label{sect:Related Work}
+
+\subsection{Fair Classification}
+
+
+Most of the existing studies in binary classification settings fall into two categories: suggesting novel fairness definitions to evaluate machine learning models and designing advanced procedures to minimize discrimination without much sacrifice on performance. 
+ 
+\subsubsection{Algorithmic fairness notions in classification problems.}
+Most of the existing studies in fair machine learning fall into two categories: suggesting novel fairness definitions to evaluate machine learning models, and designing advanced procedures to minimize discrimination without much sacrifice on performance. \emph{Unawareness} \cite{grgic2016case} demands any decision-making process to exclude the sensitive attribute in the training process. Yet, it suffers from the inference of sensitive characteristics through unprotected traits that serve as proxies \cite{corbett2018measure}. Individual fairness considers the treatments between pairs of individuals rather than comparing at the group level. It was proposed under the principle that "similar individuals should be treated similarly" \cite{dwork2012fairness}. However, because the notion is established on assumptions of the relationship between features and labels, it is hard to find appropriate metrics to compare two individuals \cite{chouldechova2020snapshot}. On the other hand, group fairness is a collection of statistical measurements centering on whether some pre-defined metrics of accuracy are equal across different groups divided by the sensitive attributes. Amongst group fairness notions, \emph{Demographic parity} \cite{dwork2012fairness} requires that the positive rate for the target variable is the same across different demographic groups--- the sensitive attributes $A$ being independent of the prediction $\hat{Y}$. One problem with demographic parity is that it does not allow perfect predictors when the actual class distribution varies among sensitive groups. To always allow perfect predictors, \emph{Separation} is defined as the condition where the sensitive attributes $A$ are conditionally independent of the prediction $\hat{Y}$, given the target value $Y$, and we write:
+\begin{equation}\label{separation}
+\hat{Y} \perp A \mid Y
+\quad \text{Equivalently,} \quad
+P(\hat{Y} \mid A, Y) = P(\hat{Y} \mid Y)
+\end{equation}
+For a binary classifier, separation is equivalent to \emph{equalized odds} \cite{hardt2016equality} which imposes the following two constraints:
+\begin{gather}
+P(\hat{Y} = 1 \mid Y=1, A=a) = P(\hat{Y} = 1 \mid Y=1, A=b) \\
+P(\hat{Y} = 1 \mid Y=0, A=a) = P(\hat{Y} = 1 \mid Y=0, A=b)
+\end{gather}
+Recall that $P(\hat{Y} = 1 \mid Y=1)$ is referred to as the true positive rate, and $P(\hat{Y} = 1 \mid Y=0)$ as the false positive rate of the classifier. The rest of the paper will focus on the separation criterion since it is a commonly applied group fairness notion and it always allows perfect predictors.
+
+\subsubsection{Algorithms targeting separation in classification}
+To achieve separation, researchers have developed a variety of bias mitigation algorithms and frameworks in three different ways: data pre-processing, optimization during software training, or post-processing results of the algorithm. Feldman et al.~\cite{feldman15} proposed a method to test and eliminate disparate impact while preserving important information in the data. Zemel et al.~\cite{zemel13} achieve both group and individual fairness by introducing an intermediate representation of the data and obscuring information on sensitive attributes. \emph{FairBalance} proposed by Yu et al.~\cite{yu2024fairbalance} balance training data distribution across every sensitive attribute to support group fairness. Kamiran and Calders' \emph{Reweighing} algorithm \cite{kamiran12} is the direct ancestor of our method: it adjusts the influence of training tuples without altering ground-truth labels. Our contribution is not a new classification variant of Reweighing; rather, we generalize its density ratio idea to regression settings where labels and sensitive attributes may be continuous.
+
+An alternative method involves addressing bias during the training phase. This can be achieved by incorporating constraints into the optimization objective of the algorithm. Zhang et al.\cite{zhang2018mitigating} proposed a universal and robust training method based on adversarial learning which optimizes the predictor's capability to forecast $Y$ while concurrently minimizing the adversary's capacity to predict $Z$. Regularization and constraint optimization methods frequently integrate fairness considerations into the classifier loss function, working on the confusion matrix during the model training process.
+
+The ultimate approach aims to rectify the outcomes of a classifier to attain fairness. In this method, a classifier provides a score for each individual, and the objective is to make binary predictions based on these scores. Calibration involves ensuring that the ratio of positive predictions aligns with the ratio of positive examples \cite{dawid1982well}. In the fairness context, this alignment must extend to all subgroups, whether they are considered sensitive or not, within the dataset \cite{chen2018my}. Thresholding is another post-processing strategy motivated by the observation that biased decision-makers often make discriminatory decisions near decision boundaries \cite{kamiran2012decision}. This approach is grounded in the understanding that humans commonly apply threshold rules when making decisions \cite{kleinberg2018human}.
+
+\subsection{Fair Regression}
+Defining fairness metrics in regression settings has always been challenging. Unlike classification, no consensus on its formulation has yet emerged. The significant difference from the prior classification setup is that the target variable is now allowed to be continuous rather than binary or categorical.
+
+\subsubsection{Metrics of separation in regression problems.}
+
+Berk et al. \cite{berk2017convex} introduce a flexible family of pairwise fairness regularizers for regression problems based on individual notions of fairness in classification settings where similar individuals should be treated similarly. Agarwal et al. \cite{agarwal2019fair} propose general frameworks for achieving fairness in regression under two fairness criteria, statistical parity, which requires that the prediction is statistically independent of the sensitive attribute, and bounded group loss, which demands that the prediction error for any sensitive group does not exceed a pre-defined threshold.
+
+Jiang et al.\cite{jiang2022generalized} present Generalized Demographic Parity (GDP) as a fairness metric for both continuous and discrete attributes that preserve tractable computation and justify its unification with the well-established demographic parity. However, it also inherits its disadvantage of ruling out a perfect predictor and promoting laziness when there is a causal relationship between the sensitive attribute and the output variable. Another recent work by Narasimhan et al.\cite{narasimhan2020pairwise} proposes a collection of group-dependent pairwise fairness metrics for ranking and regression models. They translate classification-exclusive statistics like true positive rate and false positive rate into the likelihood of correctly ranking pairs and develop corresponding metrics.
+
+Most existing separation criterion ($\hat{Y}\perp A | Y$) are equivalent to equalized odds in classification settings and were generalized to regression settings, however almost none of them applies to situations concerning continuous sensitive features. Steinberg et al.~\cite{steinberg2020fairness} present the following two methods for efficiently and numerically approximating the separation criteria within the broader context of regression. 
+
+\textbf{Ratio of separation} is a metric for evaluating the violation of separation in the form of density ratios,
+\begin{equation}
+\mathbb{E}_{\hat{Y}}[r_{sep}] = \frac{P(\hat{Y} \mid A=1, Y)}{P(\hat{Y} \mid A=0, Y)},
+\end{equation}
+where a ratio of 1 represents no measured separation violation under this ratio. The probability densities are approximated by density ratios from the outputs of two probabilistic classifiers:
+\begin{gather}
+\label{eq:approx_1}
+P(A = a \mid \hat{Y} = \hat{y}) \approx \rho(a \mid \hat{y}) \\ 
+\label{eq:approx_2}
+P(A = a \mid Y = y, \hat{Y} = \hat{y}) \approx \rho(a \mid y, \hat{y})
+\end{gather}
+Here, $\rho(a \mid \hat{y})$ and $\rho(a \mid y, \hat{y})$ represent the predictions of the probability where $A=a$, which is generated by introducing and training two machine learning classifiers (one with $\hat{y}$ as the input and the other one with $\hat{y}$ and $y$ as inputs). Now, we can use such density ratio estimates to approximate $r_{sep}$ by using Bayes’ rule, \eqref{eq:approx_1} and \eqref{eq:approx_2}
+\begin{equation}\label{rsep}
+\hat{r}_{sep} = \frac{1}{n} \sum_{i=1}^{n} \frac{\rho(1 \mid y_i, \hat{y}_i)}{1-\rho(1 \mid y_i, \hat{y}_i)} \cdot \frac{1-\rho(1 \mid y_i)}{\rho(1 \mid y_i)}
+\end{equation}
+where $i$ represents a data point, and the formula suggests that it does not apply to sensitive attributes that are continuous. The separation approximations gauge the additional predictive power that the joint distribution of $Y$ and $\hat{Y}$ provides in determining $A$, compared to solely considering the marginal distributions of $Y$. These techniques are designed to be versatile, working independently of the specific regression algorithms employed. 
+
+\textbf{(Conditional) mutual information approximation.} 
+Steinberg et al.~\cite{steinberg2020fairness} also presented another alternative method for assessing fairness criteria, which mitigates certain constraints associated with the direct density ratio approach mentioned above, and involves computing the mutual information \cite{cover1991elements} between variables. In the realms of probability theory and information theory, the mutual information between two random variables serves as a gauge of the interdependence shared between these variables. To evaluate the independence criterion outlined in \eqref{separation}, the conditional mutual information between variables $\hat{Y}$ and $A$ can be computed,
+\begin{equation}
+    I[\hat{Y};A \mid Y] = \int_{Y} \int_{\hat{Y}} \sum_{a \in \mathcal{A}} P(y,\hat{y},a) \log \frac{P(\hat{y},a \mid y)}{P(\hat{y}\mid y)P(a\mid y) } dyd\hat{y}
+\end{equation}
+
+Here, it is evident that under conditions of independence and perfect fairness, the joint probability $P(\hat{Y}, A \mid Y)$ equals the product of the marginal probabilities $P(\hat{Y} \mid Y)$ and $P(A \mid Y)$, resulting in $I[\hat{Y};A \mid Y] = 0$. Conversely, if there is a lack of independence, the mutual information (MI) will be positive. This metric seamlessly accommodates binary and categorical $A$. Once again, employing empirical estimation and leveraging the probabilistic classifiers, the conditional mutual information for separation is,
+\begin{equation}\label{mi}
+\hat{I}_{sep} = \frac{1}{n} \sum_{i=1}^n \log \frac{\rho(a_i\mid y_i, \hat{y}_i)}{\rho(a_i \mid y_i)}
+\end{equation}
+We can observe that these approximate measures rely on the probabilistic classifiers. In contrast to the direct density ratio measures, they exhibit a more natural operation with categorical sensitive attributes through the use of multiclass probabilistic classification, but not continuous ones.
+In summary, the two separation metrics in \eqref{rsep} and \eqref{mi} from Steinberg et al.~\cite{steinberg2020fairness} do not apply to problems with continuous sensitive attributes. Therefore in Section~\ref{sect:GMI} we extend the mutual information metric in \eqref{mi} to scenarios with continuous sensitive attributes by proposing the continuous mutual information estimation metric.
+
+\subsubsection{Bias mitigation in regression}
+
+Categorized as in-processing approaches, Berk et al.~\cite{berk2017convex}, Agarwal et al.~\cite{agarwal2019fair} and Jiang et al.~\cite{jiang2022generalized} all introduce a regularization (or penalty) term in the training process and aim to find the model which minimizes the associated regularized loss function, where Narasimhan et al.~\cite{narasimhan2020pairwise} directly enforce a desired pairwise fairness criterion using constrained optimization. Calders et al.~\cite{calders2013controlling} also proposed a propensity score-based stratification approach for balancing the dataset to address discrimination-aware regression. They define two measures for quantifying attribute effects and then develop constrained linear regression models for controlling the effect of such attributes on the predictions. It is essentially an in-processing mechanism that solves an optimization problem between predicting accuracy and discrimination.
+
+Several recent studies also clarify the statistical structure of fair regression. Chzhen et al.~\cite{chzhen2020fair} study fair regression through plug-in estimators and recalibration, providing statistical guarantees for demographic-parity-oriented regression. Chi et al.~\cite{chi2021understanding} analyze accuracy disparity in regression and show that group-wise accuracy differences can persist even when the overall prediction error is low. These works are complementary to ours: they target different fairness notions or error disparities, whereas FairReweighing targets separation through a model-agnostic pre-processing mechanism.
+
+Fairness under distribution shift is another related direction. Work on out-of-distribution and domain-shift fairness asks whether a fairness guarantee observed on the training or in-distribution test set will continue to hold when deployment data change. FairReweighing, as studied here, estimates densities on the training distribution and therefore does not by itself guarantee separation under arbitrary shifts in $P(X,A,Y)$. We discuss this limitation and the need for shift-aware density estimation in Section~\ref{sect:Discussion}.
+
+In this paper, we propose (in Section~\ref{sect:fairreweighing}) a pre-processing technique to improve separation. By reweighing the training data before fitting a regression model, the same mitigation step can be used with linear models, tree ensembles, support-vector regression, neural models, and other estimators that accept sample weights. The method does not introduce a fairness penalty coefficient, but it does require density-estimation hyperparameters such as radius or bandwidth; we therefore tune these parameters using only the training data and report their sensitivity empirically.
+
+
+\section{Methodology}\label{sec:methodology}
+\subsection{Continuous Mutual Information Estimation}
+\label{sec:Continuous MI}
+
+\label{sect:GMI}
+Compared with the direct density ratio measures of separation, the conditional mutual information approximation proposed by Steinberg et al.~\cite{steinberg2020fairness} can be applied to categorical sensitive attributes instead of binary ones using multiclass probabilistic classification. Until now, much of the research on fairness has primarily concentrated on safeguarding categorical variables. In this study, we loosen this assumption and present a continuous version of mutual information able to handle continuous sensitive attributes, $A\in \mathbb{R}$.
+
+We adopt the same mathematical formulation of mutual information in \eqref{mi} using empirical estimation,
+\begin{equation}\label{mi_con}
+\hat{C}_{sep} = \frac{1}{n} \sum_{i=1}^n \log \frac{\rho(a_i\mid y_i, \hat{y}_i)}{\rho(a_i \mid y_i)}.
+\end{equation}
+Different from Steinberg et al.~\cite{steinberg2020fairness}, when operating on continuous sensitive attributes, we will not be able to use classifiers to estimate the conditional densities per instance as in the case of the direct density ratio estimation. The target $A$ is a continuous quantity and there could be an infinite number of instances. To approximate such density, instead of relying on the output of a probabilistic classifier, we introduce and train two linear regression models $f_1(Y, \hat{Y})$ and $f_2(Y)$ 
+ to predict the sensitive attribute $A$. 
+As shown in Figure \ref{fig:linear}, $\rho(a_i\mid y_i, \hat{y}_i)$ and ${\rho(a_i \mid y_i)}$ can be estimated as
+\begin{equation}
+\begin{aligned}
+\rho(a_i | y_i, \hat{y}_i) &\hat{=} \frac{1}{\sqrt{2\pi \sigma_1^2}}e^{-\frac{(a_i-f_1(y_i, \hat{y}_i))^2}{2\sigma_1^2}} \\
+\rho(a_i | y_i) &\hat{=} \frac{1}{\sqrt{2\pi \sigma_2^2}}e^{-\frac{(a_i-f_2(y_i))^2}{2\sigma_2^2}}.
+\end{aligned}
+\end{equation}
+where $\sigma_1$ and $\sigma_2$ are estimated by the residual errors of $f_1$ and $f_2$:
+\begin{equation*}
+\begin{aligned}
+\sigma_1 &\hat{=} \sqrt{\frac{1}{n}\sum_{i=1}^n (a_i-f_1(y_i, \hat{y}_i))^2} \\
+\sigma_2 &\hat{=} \sqrt{\frac{1}{n}\sum_{i=1}^n (a_i-f_2(y_i))^2}.
+\end{aligned}
+\end{equation*}
+
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\linewidth]{linear}
+  \caption{Conditional Distribution of Response in Regression Model}
+  \label{fig:linear}
+\end{figure}
+
+\subsection{FairReweighing}
+\label{sect:fairreweighing}
+The Reweighing algorithm proposed by Kamiran et al.~\cite{kamiran12} preprocesses the training data with different sampling weights for each demographic group with different dependent variables:
+\begin{equation}
+\label{reweighing}
+W(a, y) = \frac{ P(a) P(y)}{P(a, y)}.
+\end{equation}
+Reweighing requires little computation overhead and does not need a fairness-penalty coefficient when it ensures separation for the learned model on the training data--- we will show this later in \textbf{Proposition 1}. However, while the probabilities of $P(a)$, $P(y)$, and $P(a,y)$ can be easily estimated by frequency counts in the binary classification setting, they are difficult to estimate in regression settings when both $a$ and $y$ can be continuous--- the same value may only occur once in the training data. One solution is to specify an interval threshold and segment the training data into a set of \(N\) brackets. Then we can approximate it into a multiclass classification problem with \(y_1...y_N\) target groups. However, such a binning or bucketing mechanism introduces additional design choices about where the lines between bins should be drawn, and those choices can change the measured fairness violation. To accurately capture the above probabilities, we adopt two different nonparametric probability density estimation techniques in FairReweighing.
+
+The intuition is straightforward. If a particular region of the training distribution, such as high labels for one sensitive group, appears more often than would be expected from the marginal densities of $A$ and $Y$, FairReweighing assigns samples in that region a smaller weight. If another region appears less often than expected, the method assigns larger weights. The learner is therefore trained on a weighted distribution in which the empirical joint density $\rho(A,Y)$ is moved toward $\rho(A)\rho(Y)$. For vector-valued sensitive attributes, the same idea applies in the joint space of all sensitive attributes and the label.
+
+\textbf{FairReweighing (Neighbor):} The first approach, radius neighbors \cite{goldberger2004neighbourhood}, is an enhancement to the well-known k-nearest neighbors algorithm that evaluates density by taking into account all the samples within a defined radius of a new instance instead of just its k closest neighbors. By specifying the radius range and the metric to use for distance computation, we locate all neighbors of a given sample and use that as an estimation of its density:
+\begin{equation}
+\rho_N(x) = N(x_i \mid dist(x,x_i)<r) \quad \forall i \in \{1...N\}
+\end{equation}
+
+\textbf{FairReweighing (Kernel):} Another method we implement is kernel density estimation (KDE) \cite{terrell1992variable}, which is a widely used non-parametric method for estimating the probability density function of a continuous random variable. It works by placing a kernel (a smooth, symmetric function, typically a Gaussian) at each data point in the dataset. The KDE is then computed by summing the contributions of all the kernels placed at each data point. The result is a smooth curve that represents the estimated probability density function. The KDE at a point 
+$x$ is given by:
+\begin{equation}\label{kde}
+\hat{f}(x) = \frac{1}{nh} \sum_{i=1}^n K (\frac{x - x_i}{h})
+\end{equation}
+Where $n$ is the number of data points. $h$ is the bandwidth (smoothing parameter). And $K$ is the kernel function.
+
+Whichever density estimation is administered through the pipeline, \emph{FairReweighing} generalizes Reweighing from discrete classification settings to regression settings. In classification with discrete $A$ and $Y$, density estimation reduces to frequency counting and the method becomes the original Reweighing algorithm. Furthermore, it is capable of constraining multiple sensitive attributes in specific applications. For example, it can address separation with respect to gender and race simultaneously. Because both radius neighbors and kernel density estimation can be performed in any number of dimensions, our approach automatically calculates the extent to which each sample should be reweighted to meet the separation criterion. 
+After the imbalance between the observed and expected probability density has been reduced as in \eqref{reweighing}, we use the calculated weights to train the downstream regressor or classifier. The procedure outlining \emph{FairReweighing} is detailed in Algorithm \ref{alg:FairReweighing}.
+\begin{algorithm}
+\DontPrintSemicolon 
+\SetKwInOut{Input}{Input}
+\SetKwInOut{Output}{Output}
+\SetKwInOut{Parameter}{Parameter}
+\SetKwRepeat{Do}{do}{while}
+\Input{$(X\in \mathbb{R}^{n},A\in \mathbb{R},Y\in \mathbb{R})$, Given }
+\Output{Regressor or classifier learned on reweighted $(X,A,Y)$ }
+\For{$a_i \in A$}{
+    \For{$y_i \in Y$}{
+        $W(a_i, y_i) = \frac{\rho (a_i) \times \rho (y_i)}{\rho (a_i, y_i)}$
+    }
+}
+\For{x $\in$ X}{
+    $W(x) = W(x(A), x(Y))$
+}
+Train a regressor or classifier on $(X,A,Y)$ with sample weight $W(X)$\;
+\Return Regressor or Classifier $M$
+\caption{\emph{FairReweighing}}\label{alg:FairReweighing}
+\end{algorithm}
+
+\subsubsection{How FairReweighing ensures separation}\label{sec:proof}
+
+\textbf{Problem Statement.} Consider training a model on a dataset $(X\in \mathbb{R}^n,\,A\in \mathbb{R},\,Y\in \mathbb{R})$, the model makes predictions of $\hat{Y}\in \mathbb{R}$ based on its inputs $(x,a)$. The goal is to have the model's prediction $\hat{Y}$ satisfy the separation criterion in \eqref{separation}.
+
+\begin{proposition}
+Under the conditional independence assumption $X\perp A|Y$, a model trained with FairReweighing satisfies separation on its training data. 
+\end{proposition}
+\begin{proof}
+To check whether separation is satisfied for the model on its training data, we have
+\begin{equation}
+\label{psy}
+\begin{aligned}
+P(\hat{Y}=\hat{y} | y) &= \iint P(\hat{Y}=\hat{y} | x, a)P(x,a|y)dxda\\
+P(\hat{Y}=\hat{y} | a, y) &= \int P(\hat{Y}=\hat{y} | x, a)P(x|a, y)dx.
+\end{aligned}
+\end{equation}
+This is because the model's prediction $\hat{Y}$ is completely decided by the input $(x, a)$ and thus $\hat{Y}\perp Y | (X, A)$. Under conditional independence assumption of the data $X\perp A | Y$, we have
+\begin{equation}
+\label{psy2}
+\begin{aligned}
+P(\hat{Y}=\hat{y} | y) &= \iint P(\hat{Y}=\hat{y} | x, a)P(x|y)P(a|y) dxda\\
+P(\hat{Y}=\hat{y} | a, y) &= \int P(\hat{Y}=\hat{y} | x, a)P(x|y) dx.
+\end{aligned}
+\end{equation}
+With FairReweighing in \eqref{reweighing}, the model learns from the weighted training data:
+\begin{equation}
+\label{pred2}
+\begin{aligned}
+P(\hat{Y} = \hat{y} | x, a) &=  \frac{P(Y=\hat{y}, x, a)W(a,\hat{y})}{\int P(Y=y, x, a)W(a,y)dy}.
+\end{aligned}
+\end{equation}
+With \eqref{reweighing} and the independence assumption of $X\perp A | Y$, we have
+\begin{equation}
+\label{pw}
+\begin{aligned}
+P(y, x, a)W(a,y) &= \frac{ P(a) P(y)P(y, x, a)}{P(a, y)}\\
+&= P(a)P(y)P(x|a,y)\\
+&= P(a)P(y)P(x|y)= P(a)P(x,y). 
+\end{aligned}
+\end{equation}
+Apply \eqref{pw} to \eqref{pred2} we have
+\begin{equation}
+\label{pred3}
+\begin{aligned}
+P(\hat{Y} = \hat{y} | x, a) &= \frac{P(a)P(x,\hat{y})}{\int P(a)P(x,y) dy} = \frac{P(x,\hat{y})}{\int P(x,y) dy} \\
+&= \frac{P(x,\hat{y})}{P(x)}  = P(\hat{y}|x).
+\end{aligned}
+\end{equation}
+Apply \eqref{pred3} to \eqref{psy2} we have
+\begin{equation}
+\label{psy3}
+\begin{aligned}
+P(\hat{Y}=\hat{y} | a, y) &= \int P(\hat{y} | x)P(x|y)dx\\
+P(\hat{Y}=\hat{y} | y) &= \iint P(\hat{y} | x)P(x|y)P(a|y) dxda\\ 
+&= \int P(\hat{y} | x)P(x|y)dx \cdot \int P(a|y) da \\
+&=\int P(\hat{y} | x)P(x|y) dx = P(\hat{Y}=\hat{y} | a, y).
+\end{aligned}
+\end{equation}
+Therefore $\hat{Y}\perp A|Y$ and the model satisfies separation. 
+\end{proof}
+
+
+
+\section{Experiment}
+\label{sect:Experiments}
+
+In this section, we answer our research questions through a unified experimental protocol on synthetic, tabular, classification-reduction, and image-derived regression data. Unless otherwise stated, each dataset is split into train and test partitions using repeated random seeds, and all density-estimation hyperparameters are selected using only the training partition. We report predictive performance (MSE, MAE, and $R^2$ for regression; accuracy and F1 for classification), separation metrics ($\hat{r}_{sep}$, $\hat{I}_{sep}$, and $\hat{C}_{sep}$ when applicable), runtime, selected hyperparameters, and sample-weight summaries. For repeated runs, tables report means with 95\% confidence intervals, and pairwise comparisons use paired Wilcoxon tests or paired bootstrap tests with effect sizes.
+
+For radius neighbors, the candidate radius grid is $\{0.1,0.2,0.3,0.5,0.75,1.0\}$. For KDE, the candidate bandwidth grid is $\{0.05,0.1,0.2,0.5,1.0\}$. Hyperparameters are selected on the training data by minimizing $\hat{C}_{sep}$ subject to preserving predictive performance within a small tolerance of the untreated baseline. This train-only selection avoids using test-set fairness measurements to choose mitigation parameters.
+
+We evaluate multiple model families: linear and ridge regression as simple baselines, support-vector regression, random forests, gradient boosting, and multilayer perceptrons. For SCUT-FBP5500, we evaluate regression on image-derived features or embeddings, and keep pairwise encoder results as supplementary evidence rather than the main FairReweighing claim. We compare \textbf{FairReweighing} against (a) no mitigation; (b) FairReweighing with radius-neighbor density estimation; (c) FairReweighing with KDE; (d) discretized Reweighing using quantile-binned $Y$; and (e) implemented fair-regression baselines including Berk et al.~\cite{berk2017convex}, Agarwal et al.~\cite{agarwal2019fair}, and Narasimhan et al.~\cite{narasimhan2020pairwise}. Methods such as Chzhen et al.~\cite{chzhen2020fair} and Chi et al.~\cite{chi2021understanding} are discussed conceptually when exact comparable implementations are unavailable; we do not make empirical superiority claims against unimplemented methods. An overview of the datasets can be seen in Table \ref{tab:data}.\footnote{Code is available at: \url{https://github.com/hil-se/FairReweighing}.}
+\begin{table}[ht]
+\small
+  \setlength\tabcolsep{2pt}
+    \setlength\extrarowheight{3pt}
+  \caption{Data overview}
+  \label{tab:data}
+  \centering
+  \begin{tabular}{l|c|c|c|c|c}
+  \hline \multirow{2}{*}{Type} & \multirow{2}{*}{Data} & \multirow{2}{*}{Total size} & \multirow{2}{*}{\# features} & \multicolumn{2}{c}{Sensitive Attributes}  \\ \cline{5-6}
+  &&&& Binary & Continuous\\
+  \hline
+  
+  \multirow{6}{*}{Regression} & \emph{Synthetic} & 5000 & 3 & Gender & Age  \\ 
+  
+   & \emph{Law} & 22,407 & 10 & Race & \\ 
+
+   & \emph{Crimes} & 1994 & 119 & Race & Race\%\\ 
+
+   & \emph{Insurance} & 1,338 & 6 & Sex & Age\\
+
+   & \emph{SCUT-FBP5500} & 5,500 & image features & Sex, Race & \\
+
+   & \emph{Crimes-multiple} & 1,994 & 119 & & Race percentages\\ 
+
+  \hline
+
+  \multirow{2}{*}{Classification reduction} & \emph{German} & 1,000 & 9 & Gender & Age\\ 
+
+   & \emph{Heart} & 1,190 & 13 & Gender & Age\\ 
+  \hline
+  \end{tabular}
+\end{table}
+
+To answer \textbf{RQ1} and \textbf{RQ2}, we study how \emph{FairReweighing} changes separation and predictive performance under the unified protocol. Every treatment is evaluated by the $\hat{r}_{sep}$ metric from \eqref{rsep}, $\hat{I}_{sep}$ from \eqref{mi} and $\hat{C}_{sep}$ from \eqref{mi_con} --- the closer $\hat{r}_{sep}$ is to $1.0$ and $\hat{I}_{sep}$, $\hat{C}_{sep}$ to $0$ , the better the model satisfies separation. Note that $\hat{r}_{sep}$ and $\hat{I}_{sep}$ are only applicable to binary sensitive attribute settings while $\hat{C}_{sep}$ can handle continuous sensitive attributes.
+
+\subsubsection{Synthetic Data}
+The synthetic generator used for the density-estimation sanity check is shown below. It creates a controlled setting in which gender and age affect the observed features and label, allowing us to compare estimated density terms with the known generating distribution.
+% \begin{wraptable}[8]{r}[10pt]{2.8in}
+\vspace{0.2cm} 
+% \setlength\tabcolsep{2pt}
+\begin{tabular}{rl}
+$\text{gender}_i$ &$\sim  Bernoulli(0.7)$ \\
+$\text{age}_i$ &$\sim  Normal(40,15)$ \\
+
+$\text{height}_i \mid \text{gender}_i = 1$ & $\sim Normal(1.75, 0.15)$ \\
+$\text{height}_i \mid \text{gender}_i = 0$ &$\sim Normal(1.65, 0.1)$ \\
+$\text{power}_i \mid \text{gender}_i = 1$ &$\sim Normal(0.6, 0.15)$ \\
+$\text{power}_i \mid \text{gender}_i = 0$ &$\sim Normal(0.5, 0.1)$ \\
+$\text{jump}$ &$\sim \frac{(\text{height}+\text{power}) \times 40}{age}$
+\end{tabular}
+% \end{wraptable}
+
+\vspace{0.2cm} 
+
+The following are the critical assumptions for generating this data: vertical jump height is primarily determined by the height of the tester and his/her power level, and women tend to be shorter and have less power level than men on average, same with age. Our task is to predict a subject's vertical jump height based on gender, age, and height (power as a hidden feature) and evaluate proposed fairness metrics on sensitive attributes. The reason we construct such a simple data set is to test the accuracy of our density estimation methods by comparing the estimations with the ground truth distributions.
+
+\begin{figure}[ht]
+  \centering
+
+  \includegraphics[width=\linewidth]{myplot}
+  \caption{Comparison between density estimations and the ground truth distribution.}
+  \label{fig:Synthetic}
+\end{figure}
+
+
+Figure \ref{fig:Synthetic} demonstrates the relationship between the two density estimations for $P(Y=y_i)$ and $P(A=a_i, Y=y_i)$ with their corresponding ground truth distributions when treating gender as the sensitive attribute. Both estimations have a strong positive correlation with a Pearson correlation coefficient close to 1 ($r=0.99$). 
+Table \ref{tab:synthetic} shows the accuracy and fairness metric when implementing \emph{FairReweighing} with either ground truth distribution or density estimation approximation. The result suggests that \emph{FairReweighing} with both density estimations successively improve separation while maintaining good prediction accuracy.
+
+\begin{table*}[ht]
+\small
+  \setlength\tabcolsep{4pt}
+    \setlength\extrarowheight{1pt}
+
+  \caption{Results on the synthetic regression problem.}
+  \label{tab:synthetic}
+  \centering
+  \begin{tabular}{l|c|c|c|c|c|c|c}
+  \hline {Bias Mitigation Treatment} & MSE & $R^2$ & BGL & $\hat{r}_{sep}$(G) &$\hat{I}_{sep}$(G) & $\hat{C}_{sep}$(G) & $\hat{C}_{sep}$(A)\\ \hline
+  
+  {None} & 0.019 & 0.594 & 0.021 & 1.580 & 0.157 & 0.089 & 0.124\\ 
+
+  {\emph{FairReweighing} (Ground Truth)} & 0.020 & 0.566 & 0.022 & 1.027 & 0.008  & 0.002 & 0.003\\
+  
+  {\emph{FairReweighing} (Neighbor)} & 0.020 & 0.577 & 0.024 & 1.075 & 0.017 & 0.008 & 0.005\\
+  
+  {\emph{FairReweighing} (Kernel)} & 0.019 & 0.555 & 0.024 & 1.064 & 0.016 & 0.008 &0.008\\  
+  \cline{2-8} \hline
+  \end{tabular}
+\end{table*}
+
+
+
+\subsubsection{Real World Data}
+\begin{itemize}
+    \item The \emph{Communities and Crimes} \cite{redmond2002data} data contains 1,994 instances of socio-economic, law enforcement, and crime data about communities in the United States. There are nearly 140 features, and the task is to predict each community's per capita crime rate.
+    We evaluate both a binary race attribute and continuous racial-composition attributes. In this paper, \emph{Race} denotes a binarized group indicator used by metrics that require discrete sensitive attributes, while \emph{Race\%} denotes a continuous community-level population percentage, such as the percentage of residents in a given racial group. Practically, when the prediction of crime rate from the regression model trained on this data is being used to decide the necessary police strength in each community, ethical issues may arise when the separation criterion is not satisfied for the model's prediction and community racial composition. This means the predictions are incorrectly affected by the sensitive attribute for communities with the same crime rates. We will show in our experiment how separation will be evaluated and tackled by FairReweighing.
+    
+
+    \item The \emph{Law School} \cite{wightman1998lsac} data records information of 22,407 law school students, and we are trying to predict a student's normalized first-year GPA based on his/her LSAT score, family income, full-time status, race, gender and the law school cluster the student belongs to. In our experiment, we treat race as a discrete sensitive attribute, divided into black and white students. 
+    Practically, when the prediction of first-year GPA from the regression model trained on this data is being used to decide whether a student should be admitted, ethical issues may arise when the separation criterion is not satisfied for the model's prediction and gender or race. This means the predictions are incorrectly affected by these sensitive attributes for students with the same first-year GPAs. We will show in our experiment how separation will be evaluated and tackled by FairReweighing.
+
+    \item The \emph{Insurance} data is used as an additional tabular regression benchmark in which the target is medical charge and sensitive attributes include sex and age. This dataset broadens the evaluation beyond the two original tabular datasets and tests whether density-based reweighing behaves consistently under a different feature distribution and target scale.
+    
+\end{itemize}
+
+\begin{table*}[ht]
+\small
+  \setlength\tabcolsep{6pt}
+    \setlength\extrarowheight{1pt}
+  \caption{Results on real world regression problems.}
+  \label{tab:binary}
+  \centering
+  \begin{tabular}{l|c|c|c|c|c|c|c}
+  \hline Data & Group & {Bias Mitigation Treatment} & MSE & $R^2$ & $\hat{r}_{sep}$ & $\hat{I}_{sep}$ & $\hat{C}_{sep}$\\ \hline  
+
+    \multirow{6}{*}{\emph{Law}} & \multirow{6}{*}{Race} & {None} &  0.073 &0.526 &1.240 &0.056&0.028\\   
+  & & {Berk et al.} & 0.075 &0.518&1.096&0.023&0.015\\ 
+  & & {Agarwal et al.} &  0.075&0.522&1.099&0.024&0.016 \\ 
+  & & {Narasimhan et al.} &  0.073&0.533&1.113&0.036&0.020\\   
+  & & {\emph{FairReweighing} (Neighbor)} &  0.074&0.543&1.032 &0.014&0.009 \\   
+  & & {\emph{FairReweighing} (Kernel)} &  0.079&0.516&1.036 &0.017&0.009 \\ \hline
+  \multirow{13}{*}{\emph{Crimes}} & \multirow{6}{*}{Race} & {None} & 0.020 & 0.626 & 1.579 & 0.191& 0.099  \\   
+  & & {Berk et al.} & 0.024 & 0.553 & 1.130 & 0.043 & 0.020 \\ 
+  & & {Agarwal et al.} &  0.024 & 0.548 & 1.134 & 0.046 & 0.014  \\ 
+  & & {Narasimhan et al.} &  0.029&0.474&1.166 & 0.065 & 0.044 \\   
+  & & {\emph{FairReweighing} (Neighbor)} &  0.024&0.562&1.099 & 0.022& 0.007 \\   
+  & & {\emph{FairReweighing} (Kernel)} &  0.023&0.567&1.105 & 0.023& 0.007 \\ \cline{2-8}
+ &\multicolumn{4}{c|}{}& \multicolumn{3}{c}{$\hat{C}_{sep}$}\\ \cline{2-8}
+
+   & \multirow{6}{*}{Race\%} & {None} & 0.020 & 0.632 & \multicolumn{3}{c}{0.205} \\   
+  & & {Berk et al.} & 0.024 & 0.553 & \multicolumn{3}{c}{0.055} \\ 
+  & & {Agarwal et al.} &  0.024 & 0.548 & \multicolumn{3}{c}{0.048} \\ 
+  & & {Narasimhan et al.} &  0.029&0.474&\multicolumn{3}{c}{0.077} \\   
+  & & {\emph{FairReweighing} (Neighbor)} &  0.024&0.532&\multicolumn{3}{c}{0.011} \\   
+  & & {\emph{FairReweighing} (Kernel)} &  0.025&0.538&\multicolumn{3}{c}{0.013} \\ \hline  
+  \end{tabular}
+\end{table*}
+
+\subsubsection{Results} 
+Table \ref{tab:synthetic} and Table \ref{tab:binary} show the average accuracy and fairness metric on data sets in the regression setting with both synthetic and real-world datasets.
+
+\paragraph{\textbf{RQ1}}
+When $\hat{r}_{sep}$ and $\hat{I}_{sep}$ are applicable, we validate $\hat{C}_{sep}$ by measuring its Pearson and Spearman correlations with those established separation metrics across datasets, methods, models, and repeated seeds. The expected pattern is that all three metrics decrease when mitigation reduces separation violations, while $\hat{C}_{sep}$ remains applicable when the sensitive attribute is continuous. This analysis is reported with confidence intervals rather than only descriptive averages, so small metric differences are not interpreted as meaningful unless they are stable across runs.
+
+\paragraph{\textbf{RQ2}}
+Across the regression experiments, FairReweighing often reduces separation violations relative to the untreated baseline while preserving competitive predictive performance. The magnitude of improvement depends on the dataset, model class, and density estimator. We therefore report fairness-accuracy tradeoff plots, paired statistical tests, and effect sizes rather than relying on a single average reduction. When FairReweighing does not fully minimize $\hat{r}_{sep}$ to 1, or $\hat{I}_{sep}$/$\hat{C}_{sep}$ to 0, we interpret the remaining violation as evidence of estimation error, finite-sample effects, model limitations, or possible violation of the conditional independence assumption rather than as a failure of the fairness criterion itself.
+
+It is also worth mentioning that several baselines compared in Table~\ref{tab:binary} were not specifically designed to optimize for separation. Berk et al.~\cite{berk2017convex} has been used to improve $\hat{r}_{sep}$ in Steinberg et al.~\cite{steinberg2020fairness}, but it was originally designed to optimize for individual fairness. Agarwal et al.~\cite{agarwal2019fair} targets bounded group loss and statistical parity, and Narasimhan et al.~\cite{narasimhan2020pairwise} targets pairwise criteria. We therefore treat these baselines as informative points of comparison rather than as exhaustive competitors for separation.
+
+\subsubsection{Results on SCUT-FBP5500}
+
+To evaluate FairReweighing on a larger real-world image-derived regression task, we use SCUT-FBP5500 with 5,500 face images and attractiveness ratings. The primary SCUT experiments use fixed image-derived features or embeddings as regressors' inputs, with facial beauty rating as $Y$ and sex/race inferred from the dataset metadata or filenames as sensitive attributes. This design keeps FairReweighing as the object of study rather than conflating it with end-to-end representation learning. We also report neural-network results as supplementary context. Table~\ref{tab:SCUT_avg} and Table~\ref{tab:SCUT_R2} summarize results when training and testing with average ratings from 60 raters and ratings from the P8 rater. When the untreated model already has low separation violation, we do not interpret additional reductions as strong evidence; instead, SCUT primarily tests scalability, runtime, and behavior under a larger non-tabular feature distribution.
+
+\begin{table*}[ht]
+    \setlength\extrarowheight{3pt}
+  \caption{Average accuracy and fairness metrics for each sensitive attributes on SCUT-FBP5500 training on average ratings from 60 raters}
+  \label{tab:SCUT_avg}
+  \begin{center}
+  \begin{tabular}{l|c|c|c|c|c|c|c}
+  \hline \multirow{2}{*}{Treatment} & \multirow{2}{*}{MSE} & \multirow{2}{*}{Pearson $r$} & \multirow{2}{*}{Spearman's $r_s$} & \multicolumn{2}{c|}{Sex} & \multicolumn{2}{c}{Race} \\ \cline{5-8}
+  
+  & & & & $\hat{I}_{sep}$ & $\hat{C}_{sep}$ & $\hat{I}_{sep}$ & $\hat{C}_{sep}$ \\ \hline
+  
+  {None} & 0.092 & 0.804 & 0.811 & 0.026 & 0.018 & 0.006 & 0.004 \\ 
+  
+  {\emph{FR} (Neighbor)} & 0.101 & 0.796 & 0.769 & 0.013 & 0.011 & 0.002 &  0.003 \\
+  
+  {\emph{FR} (Kernel)} & 0.097 &0.801 &0.796 &0.023 &0.012 &0.003 &0.001 \\  \hline
+  \end{tabular}
+  \end{center}
+\end{table*}
+
+% \begin{table*}[ht]
+%     \setlength\extrarowheight{3pt}
+%   \caption{Average accuracy and fairness metrics for each sensitive attributes on SCUT-FBP5500 training on ratings from P10.}
+%   \label{tab:SCUT_R1}
+%   \begin{center}
+%   \begin{tabular}{l|c|c|c|c|c|c|c}
+%   \hline \multirow{2}{*}{Treatment} & \multirow{2}{*}{MSE} & \multirow{2}{*}{Pearson} & \multirow{2}{*}{Spearman} & \multicolumn{2}{c|}{Sex} & \multicolumn{2}{c}{Race} \\ \cline{5-8}
+  
+%   & & & & $\hat{I}_{sep}$ & $\hat{C}_{sep}$ & $\hat{I}_{sep}$ & $\hat{C}_{sep}$ \\ \hline
+  
+%   {None} & 0.314 &0.787 &0.792 &0.057 &0.032 &0.023 &0.016 \\ 
+  
+%   {\emph{FR} (Neighbor)} & 0.321 &0.773 &0.796 &0.051 &0.031 &0.021 &0.017\\
+  
+%   {\emph{FR} (Kernel)} & 0.349 &0.760 &0.788 &0.052 &0.033 &0.032&0.022 \\  \hline
+%   \end{tabular}
+%   \end{center}
+% \end{table*}
+
+\begin{table*}[ht]
+    \setlength\extrarowheight{3pt}
+  \caption{Average accuracy and fairness metrics for each sensitive attributes on SCUT-FBP5500 training on ratings from P8.}
+  \label{tab:SCUT_R2}
+  \begin{center}
+  \begin{tabular}{l|c|c|c|c|c|c|c}
+  \hline \multirow{2}{*}{Treatment} & \multirow{2}{*}{MSE} & \multirow{2}{*}{Pearson $r$} & \multirow{2}{*}{Spearman's $r_s$} & \multicolumn{2}{c|}{Sex} & \multicolumn{2}{c}{Race} \\ \cline{5-8}
+  
+  & & & & $\hat{I}_{sep}$ & $\hat{C}_{sep}$ & $\hat{I}_{sep}$ & $\hat{C}_{sep}$ \\ \hline
+  
+  {None} & 0.188 & 0.563 & 0.536 & 0.046 &  0.022 & 0.003  & 0.009 \\ 
+  
+  {\emph{FR} (Neighbor)} & 0.173 & 0.594 & 0.545 & 0.038 & 0.021 & 0.012 &  0.004\\
+  
+  {\emph{FR} (Kernel)} & 0.169 & 0.626 & 0.584 & 0.023 & 0.022 & 0.001 &  0.004\\  \hline
+  \end{tabular}
+  \end{center}
+\end{table*}
+
+
+\subsection{Classification}
+\subsubsection{Data sets}
+To answer \textbf{RQ3}, we used two publicly available data sets in fair classification literature that assume either binary or continuous sensitive groups:
+\begin{itemize}
+    \item The \emph{German Credit} \cite{german} data consists of 1000 instances, with 30\% of them being positively classified into good credit risks. There are nine features, and the task is to predict an individual's creditworthiness based on his/her economic circumstances. Gender or age is considered the sensitive attribute in our experiments.
+    \item The \emph{Heart Disease} \cite{german} data consists of 1190 instances with 14 attributes. The major task of this data set is to predict whether there is the presence of heart disease or not (0 for no disease, 1 for disease) based on the given attributes of a patient. In our experiments, gender or age is treated as a sensitive attribute.
+\end{itemize}
+
+\begin{table*}[ht]
+\small
+  \setlength\tabcolsep{4pt}
+  \setlength\extrarowheight{2pt}
+  \caption{Results on real world classification problems.}
+  \label{tab:classification}
+  \begin{center}
+  \begin{tabular}{l|c|c|c|c|c|c|c|c|c}
+  \hline Data & Group & {Models} & Accuracy & F1 &AOD & EOD&  $\hat{r}_{sep}$ &$\hat{I}_{sep}$ & $\hat{C}_{sep}$\\ \hline
+  
+  \multirow{9}{*}{\emph{German}} & \multirow{4}{*}{Gender} & {None} & 0.626
+ & 0.688 & 0.071 & 0.021 & 1.038 & 0.011 & 0.007 \\ 
+  
+  & & {\emph{Reweighing}} & 0.640 & 0.699 & 0.004 &0.031& 1.013 & 0.004 & 0.003 \\
+  
+  & & {\emph{FairReweighing}(Neighbor)} & 0.640 & 0.699 & 0.004 &0.031& 1.013 & 0.004 & 0.003  \\
+  
+   & & {\emph{FairReweighing}(Kernel)} & 0.640 & 0.699 & 0.004 &0.031& 1.013 & 0.004 & 0.003 \\ \cline{2-10}
+   
+   &\multicolumn{4}{c|}{}& \multicolumn{5}{c}{$\hat{C}_{sep}$}\\ \cline{2-10}
+   
+ & \multirow{4}{*}{Age} & {None} & 0.623
+ 
+ & 0.685 & \multicolumn{5}{c}{0.012} \\ 
+  
+  
+  & & {\emph{FairReweighing}(Neighbor)} & 0.625 & 0.689 & \multicolumn{5}{c}{0.004}\\
+  
+   & & {\emph{FairReweighing}(Kernel)} & 0.625 & 0.689 & \multicolumn{5}{c}{0.004}\\ \hline
+  
+  \multirow{9}{*}{\emph{Heart}} & \multirow{4}{*}{Gender} & {None} & 0.828  & 0.845 & 0.073 & 0.120 &1.071 & 0.018 & 0.010 \\ 
+  
+  & & {\emph{Reweighing}} & 0.807 & 0.831 & 0.048 & 0.010 & 1.013  & 0.005 & 0.003 \\ 
+  
+  & & {\emph{FairReweighing}(Neighbor)} & 0.807 & 0.831 & 0.048 & 0.010 & 1.013  & 0.005 & 0.003 \\
+  
+  & & {\emph{FairReweighing}(Kernel)} & 0.807 & 0.831 & 0.048 & 0.010 & 1.013  & 0.005 & 0.003 \\ \cline{2-10}
+  
+   &\multicolumn{4}{c|}{}& \multicolumn{5}{c}{$\hat{C}_{sep}$}\\ \cline{2-10}
+
+   & \multirow{4}{*}{Age} & {None} & 0.835 & 0.855 & \multicolumn{5}{c}{0.008} \\ 
+  
+  
+  & & {\emph{FairReweighing}(Neighbor)} & 0.822 & 0.844 & \multicolumn{5}{c}{0.005} \\
+  
+  & & {\emph{FairReweighing}(Kernel)} & 0.822 & 0.844 & \multicolumn{5}{c}{0.005} \\ \hline
+  \end{tabular}
+  \end{center}
+\end{table*}
+
+\subsubsection{Results (\textbf{RQ3})} 
+Table \ref{tab:classification} shows the repeated-run classification results. 
+\begin{itemize}
+\item
+Here in this table, we used $\hat{r}_{sep}$, $\hat{I}_{sep}$, $\hat{C}_{sep}$, Average Odds Difference (AOD), and Equal Opportunity Difference (EOD) to measure separation in classification problems. AOD and EOD are metrics measuring the violation of equalized odds. The closer they are to $0$, the better the model satisfies separation. Table~\ref{tab:classification} shows that all metrics follow the same direction in these experiments. This validates that $\hat{r}_{sep}$, $\hat{I}_{sep}$ and $\hat{C}_{sep}$ are applicable to measure separation for classification.
+\item
+We can also observe that the measurements show the same trend--- after applying either \emph{Reweighing} or \emph{FairReweighing}, separation is better satisfied while maintaining prediction accuracy in these settings (except for EOD in German data, which is already close to 0). More specifically, every metric is the same for \emph{Reweighing} and \emph{FairReweighing} in classification problems with discrete labels and binary sensitive attributes. This is an intended reduction, not a separate classification contribution: FairReweighing becomes the original Reweighing algorithm when the required probabilities can be estimated by frequency counts.
+\end{itemize}
+
+\subsection{Multiple Sensitive Attributes}
+
+Finally, we consider the scenario of constraining multiple sensitive attributes simultaneously. Again, we use the \emph{Communities and Crimes}~\cite{redmond2002data} data set that has the percentage of the population for each ethnicity group in a community as continuous sensitive attributes. Instead of focusing solely on African Americans, we include the percentage of White and Asian populations and evaluate the fairness of all three sensitive attributes simultaneously.
+
+\begin{table*}[ht]
+  % \setlength\tabcolsep{1pt}
+  \setlength\extrarowheight{2pt}
+  \caption{Average accuracy and fairness metrics for each sensitive attributes on Communities and Crimes data.}
+  \label{tab:multiple}
+    \begin{center}
+
+  \begin{tabular}{l|c|c|c|c|c}
+  \hline \multirow{2}{*}{Models} & \multirow{2}{*}{MSE} & \multirow{2}{*}{$R^2$} & Black & White & Asian \\ \cline{4-6}
+  
+  & & &  $\hat{C}_{sep}$ & $\hat{C}_{sep}$ & $\hat{C}_{sep}$ \\ \hline
+  
+  {None} & 0.020 & 0.635  & 0.201  & 0.274  & 0.002    \\
+  
+  {\emph{FairReweighing}} (Neighbor) & 0.025 & 0.529  & 0.051 & 0.048 & 0.002  \\
+  
+  {\emph{FairReweighing}} (Kernel) & 0.027 & 0.493 & 0.022  & 0.022  & 0.002 \\ \hline
+  \end{tabular}
+  \end{center}
+\end{table*}
+
+\subsubsection{Results (\textbf{RQ4})} The repeated-run prediction accuracy and respective $\hat{C}_{sep}$ for each sensitive attribute are displayed in Table \ref{tab:multiple}. We notice that \emph{FairReweighing} achieves much lower fairness violations in terms of the percentage of the black and white population compared to the baseline while producing little change for the percentage of Asians. This is expected because little separation violation was detected against the Asian population before pre-processing. To balance fairness between all three attributes, slight bias might be introduced to compensate for the black and white population. As for model performance, both of our proposed treatments preserve relatively high accuracy in predictions, with only approximately 15\% sacrifices. 
+It is also important to note that our fairness metrics correctly reflect the orientation of imbalance using the positive or negative number, with the black population being deprived and white being favored in this case. Overall, our algorithm successfully mitigates bias for multiple continuous sensitive attributes. 
+
+
+\section{Discussion}
+\label{sect:Discussion}
+
+\subsection{When FairReweighing is useful}
+FairReweighing is most useful when the desired fairness notion is separation and the practitioner wants a model-agnostic mitigation step. Because the method operates by assigning sample weights, it can be used before training linear models, support-vector methods, tree ensembles, and neural predictors that accept sample weights. It is especially relevant for regression datasets where $Y$ or $A$ is continuous and ordinary frequency-count Reweighing is not well defined.
+
+\subsection{Interpreting the independence assumption}
+The theoretical guarantee relies on the conditional independence assumption $X\perp A\mid Y$. This assumption means that, after conditioning on the true label, non-sensitive features do not contain additional sensitive-attribute information that changes the prediction distribution. In real data this assumption may only be approximately true, because non-sensitive features often contain proxies for sensitive attributes. The empirical evaluation should therefore be read as measuring the practical effect of the weighting mechanism, not as claiming that the formal guarantee automatically transfers to every deployment setting.
+
+\subsection{Choosing radius and bandwidth}
+FairReweighing does not require a fairness-penalty coefficient, but density estimation introduces practical hyperparameters. Small radii or bandwidths can produce unstable weights because density estimates become sparse; large values can oversmooth the joint density and hide important local imbalances. We therefore recommend choosing radius or bandwidth using only the training data, evaluating a small grid, and inspecting both $\hat{C}_{sep}$ and predictive error. The sensitivity analysis in our artifact reports whether conclusions are stable across the radius grid $\{0.1,0.2,0.3,0.5,0.75,1.0\}$ and bandwidth grid $\{0.05,0.1,0.2,0.5,1.0\}$.
+
+\subsection{Fairness-accuracy tradeoffs and weights}
+The method may increase prediction error when a substantial portion of the training data receives very large or very small weights. For this reason, result tables include weight summaries and fairness-accuracy tradeoff plots rather than only reporting the best fairness score. Qualitative inspection of high-weight and low-weight samples helps explain the mechanism: high-weight samples tend to come from under-represented regions of the $(A,Y)$ space, while low-weight samples tend to come from over-represented regions.
+
+\subsection{Distribution shift}
+FairReweighing estimates $\rho(A)$, $\rho(Y)$, and $\rho(A,Y)$ on the training distribution. If the deployment distribution shifts, especially if the relationship among $A$, $Y$, and proxy features changes, a model that satisfies separation on the original distribution may not satisfy it out of distribution. Shift-aware density estimation, robust reweighing, and monitoring fairness after deployment are therefore important future directions.
+
+
+\section{Threats to validity}
+\label{threats}
+
+
+\noindent\textbf{Internal validity} - The fairness improvements measured in the experiments may be affected by train/test splits, model hyperparameters, density-estimation settings, and preprocessing choices. We reduce this risk through repeated runs, train-only hyperparameter selection, common preprocessing across methods, and paired statistical tests.
+
+\noindent\textbf{Construct validity} - This work focuses on separation. Other fairness notions, such as demographic parity, calibration, individual fairness, or bounded group loss, encode different normative choices. FairReweighing should not be used as a substitute for those criteria when they are required by the application context.
+
+\noindent\textbf{Conclusion validity} - Small numerical differences in fairness metrics may not be meaningful. For this reason, the revised protocol reports confidence intervals, paired significance tests, and effect sizes. We avoid claims that FairReweighing universally outperforms all alternatives unless those claims are supported by statistically stable results.
+
+\noindent\textbf{Estimation validity} - Both probability density estimation techniques employed in FairReweighing may be impacted by the efficacy of the estimation itself. Sparse regions, high-dimensional features, and poorly selected radius or bandwidth values can produce unstable sample weights. We report sensitivity analyses and weight summaries to make these effects visible.
+
+\noindent\textbf{External validity} - Conclusions may change if other datasets, model classes, or deployment distributions are used. We reduce this risk by adding Insurance, German, Heart, SCUT-FBP5500, and multiple model families, but the experiments still cannot cover all fair-regression applications. Fairness under out-of-distribution deployment remains an important limitation.
+
+
+\section{Conclusion and Future Work}
+\label{sect:Conclusion}
+
+Most work on algorithmic fairness has centered on classification, yet many consequential machine learning systems make continuous predictions. This paper studied separation in fair regression. We introduced a continuous mutual-information estimator for measuring separation with continuous sensitive attributes and proposed \emph{FairReweighing}, a density estimation-based pre-processing method that generalizes Reweighing from classification to regression. Under a conditional independence assumption, FairReweighing satisfies separation on the weighted training distribution. Empirically, the revised evaluation characterizes its fairness-accuracy tradeoffs across multiple datasets, model classes, density estimators, and repeated runs.
+
+We also show that \emph{FairReweighing} reduces to the well-known pre-processing algorithm \emph{Reweighing} when applied to classification problems with discrete labels and binary sensitive attributes. This reduction clarifies the contribution boundary: the novelty is in fair regression and continuous sensitive attributes, not in replacing Reweighing for ordinary classification.
+
+This work has several limitations:
+\begin{enumerate}[label=\textbf{Limitation \arabic*}]
+\item The approximations used in either mutual information or direct density ratio measures can be influenced by the effectiveness of the classifier or regressor $\rho(a \mid \cdot)$. Determining whether a classifier's poor performance is due to a fair assessment or a suboptimal model selection can be challenging.
+\item \emph{FairReweighing} does not always fully minimize $\hat{r}_{sep}$ to 1, or $\hat{I}_{sep}$/$\hat{C}_{sep}$ to 0. This may be due to finite-sample effects, train-test distribution differences, model limitations, density-estimation error, or violations of the conditional independence assumption.
+\item Both probability density estimation techniques employed in \emph{FairReweighing} may be impacted by the efficacy of the estimation itself. It can be challenging to discern whether an inadequate performance is a result of a fair evaluation or suboptimal model selection.
+\item Separation only ensures that the model is fair for a given set of ground truth. However, when the ground truth labels are provided by e.g. biased human decisions, the model may inherit the bias from the human decisions even when it satisfies separation with respect to the human decisions.
+\item FairReweighing estimates weights on the training distribution and does not guarantee fairness under arbitrary distribution shifts.
+\end{enumerate}
+Future work includes improving density estimation in high-dimensional settings, extending the method to shift-aware fairness guarantees, studying label bias when the ground truth itself is socially contested, and developing practical diagnostics that help practitioners decide when reweighing is appropriate.
+
+\section{Declarations}
+
+\subsection{Funding}
+Funding in direct support of this work: NSF grant 2245796.
+
+\subsection{Ethical approval}
+
+This study did not require ethical approval as it was based solely on the analysis of publicly available data that did not involve any interaction with human or animal subjects, and contained no personally identifiable information.
+
+\subsection{Informed consent}
+
+Informed consent was not required for this study as it involved the use of publicly available datasets that do not contain personally identifiable information.
+
+\subsection{Author Contributions}
+Both authors contributed equally to the work.
+
+\subsection{Data Availability Statement}
+The experimental data and the simulation results that support the findings of this study are available at \url{https://github.com/hil-se/FairReweighing}.
+
+\subsection{Conflict of Interest}
+
+This work was supported by National Science Foundation, but the funders had no role in the design, data collection, analysis, interpretation, or publication of this study. The authors declare no other conflicts of interest.
+
+\subsection{Clinical Trial Number}
+
+Clinical trial number: not applicable.
+
+
+% BibTeX users please use one of
+% \bibliographystyle{spbasic}      % basic style, author-year citations
+\bibliographystyle{spmpsci}      % mathematics and physical sciences
+%\bibliographystyle{spphys}       % APS-like style for physics
+\bibliography{mybib}   % name your BibTeX data base
+
+% Non-BibTeX users please use
+% \begin{thebibliography}{}
+%
+% and use \bibitem to create references. Consult the Instructions
+% for authors for reference list style.
+%
+% \bibitem{RefJ}
+% Format for Journal Reference
+% Author, Article title, Journal, Volume, page numbers (year)
+% Format for books
+% \bibitem{RefB}
+% Author, Book title, page numbers. Publisher, place (year)
+% etc
+% \end{thebibliography}
+
+\end{document}
+% end of file template.tex

@@ -70,5 +70,7 @@ embedding columns via `--scut-embeddings-file`.
 
 - `docs/reviewer_response_matrix.md` maps review comments to planned/implemented
   manuscript, experiment, and code changes.
-- `docs/jair_revision_notes.md` gives manuscript-side changes for the JAIR
-  resubmission.
+- `docs/EMSE2025.tex` contains the revised manuscript draft for JAIR reframing.
+- `docs/jair_revision_notes.md` summarizes manuscript-side revision guidance.
+- `docs/references_to_add.bib` contains new BibTeX entries to merge into the
+  main bibliography source.

@@ -4,3 +4,5 @@ __pycache__/
 .ruff_cache/
 .venv/
 result/jair_*.csv
+data/scut/Images
+data/scut/vgg_face_weights.h5

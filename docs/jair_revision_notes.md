@@ -18,7 +18,7 @@ Use precise claims:
 - Empirical claims should be tied to the datasets, models, and statistical tests
   reported in the revised results.
 
-## Method Intuition To Add Before The Proof
+## Method Intuition Added Before The Proof
 
 FairReweighing changes the training distribution, not the labels. Samples from
 overrepresented `(A, Y)` regions receive smaller weights; samples from
@@ -27,7 +27,7 @@ weighted joint density of sensitive attribute and label resembles the product of
 their marginals, so the learner sees a training set where `A` is less informative
 about prediction errors after conditioning on `Y`.
 
-## Related Work To Add
+## Related Work Added Or Flagged
 
 - Kamiran and Calders: original Reweighing for classification.
 - Berk et al., Agarwal et al., Narasimhan et al.: fair regression baselines and
