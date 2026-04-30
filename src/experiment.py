@@ -5,22 +5,23 @@ import pandas as pd
 from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.compose import make_column_selector as selector
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.svm import SVR
-from sklearn.tree import DecisionTreeRegressor
 from sklearn.utils.validation import has_fit_parameter
 
 from data_reader import load_dataset
 from density_balance import DensityBalance
 from metrics import Metrics
+from vgg_face_model import ScutVGGFaceRegressor
 
 
 DEFAULT_RADIUS_GRID = [0.1, 0.2, 0.3, 0.5, 0.75, 1.0]
 DEFAULT_BANDWIDTH_GRID = [0.05, 0.1, 0.2, 0.5, 1.0]
+DEFAULT_TEST_SIZE = 0.5
+DEFAULT_BINS = 5
 
 
 class Experiment:
@@ -31,27 +32,23 @@ class Experiment:
         balance="none",
         density_model="Neighbor",
         seed=0,
-        test_size=0.5,
-        tune_density=False,
-        radius_grid=None,
-        bandwidth_grid=None,
-        n_bins=5,
         dataset_options=None,
     ):
         self.data = data
         self.seed = seed
         self.balance = normalize_method(balance)
         self.density_model = normalize_density(density_model)
-        self.test_size = test_size
-        self.tune_density = tune_density
-        self.radius_grid = radius_grid or DEFAULT_RADIUS_GRID
-        self.bandwidth_grid = bandwidth_grid or DEFAULT_BANDWIDTH_GRID
-        self.n_bins = n_bins
+        self.test_size = DEFAULT_TEST_SIZE
+        self.n_bins = DEFAULT_BINS
         self.dataset_options = dataset_options or {}
         self.X, self.y, self.protected = load_dataset(data, seed=seed, **self.dataset_options)
         self.task_type = "classification" if len(np.unique(self.y)) == 2 else "regression"
-        self.regressor_name = default_model_for_task(self.task_type) if regressor in (None, "auto") else regressor
+        self.regressor_name = self.default_model(regressor)
         self.regressor = build_estimator(self.regressor_name, self.task_type, seed)
+        if has_image_features(self.X) and not is_raw_image_model(self.regressor):
+            raise ValueError("SCUT image data uses model=vgg_face.")
+        if is_raw_image_model(self.regressor) and not has_image_features(self.X):
+            raise ValueError("The vgg_face model requires SCUT image_path features.")
         self.preprocessor = None
         self.selected_density_param = None
         self.weight_examples = pd.DataFrame()
@@ -60,9 +57,13 @@ class Experiment:
     def run(self):
         started = time.perf_counter()
         self.train_test_split()
-        self.preprocess(self.X_train)
-        X_train = self.preprocessor.transform(self.X_train)
-        X_test = self.preprocessor.transform(self.X_test)
+        if is_raw_image_model(self.regressor):
+            X_train = self.X_train[["image_path"]]
+            X_test = self.X_test[["image_path"]]
+        else:
+            self.preprocess(self.X_train)
+            X_train = self.preprocessor.transform(self.X_train)
+            X_test = self.preprocessor.transform(self.X_test)
 
         fit_started = time.perf_counter()
         sample_weight = self.make_sample_weight()
@@ -107,6 +108,13 @@ class Experiment:
         self.X_train = self.X_train.reset_index(drop=True)
         self.X_test = self.X_test.reset_index(drop=True)
 
+    def default_model(self, regressor):
+        if regressor not in (None, "auto"):
+            return regressor
+        if has_image_features(self.X):
+            return "vgg_face"
+        return default_model_for_task(self.task_type)
+
     def preprocess(self, X):
         numerical_columns = selector(dtype_exclude=object)(X)
         categorical_columns = selector(dtype_include=object)(X)
@@ -122,7 +130,7 @@ class Experiment:
             self.weight_examples = pd.DataFrame()
             return None
 
-        if self.balance == "fair-reweighing" and self.tune_density:
+        if self.balance == "fair-reweighing":
             self.selected_density_param = self.select_density_param()
         elif self.density_model == "Neighbor":
             self.selected_density_param = 0.5
@@ -146,7 +154,10 @@ class Experiment:
         return weights
 
     def select_density_param(self):
-        grid = self.radius_grid if self.density_model == "Neighbor" else self.bandwidth_grid
+        if is_raw_image_model(self.regressor):
+            return 0.5 if self.density_model == "Neighbor" else 0.2
+
+        grid = DEFAULT_RADIUS_GRID if self.density_model == "Neighbor" else DEFAULT_BANDWIDTH_GRID
         X_fit, X_val, y_fit, y_val = train_test_split(
             self.X_train,
             self.y_train,
@@ -271,19 +282,14 @@ def build_estimator(name, task_type, seed):
         models = {
             "logistic": LogisticRegression(max_iter=1000, random_state=seed),
             "rf": RandomForestClassifier(n_estimators=200, random_state=seed),
-            "randomforest": RandomForestClassifier(n_estimators=200, random_state=seed),
         }
     else:
         models = {
             "linear": LinearRegression(),
             "ridge": Ridge(alpha=1.0, random_state=seed),
-            "svr": SVR(kernel="rbf"),
-            "dt": DecisionTreeRegressor(max_depth=8, random_state=seed),
             "rf": RandomForestRegressor(n_estimators=200, random_state=seed, n_jobs=-1),
-            "randomforest": RandomForestRegressor(n_estimators=200, random_state=seed, n_jobs=-1),
-            "gbr": GradientBoostingRegressor(random_state=seed),
-            "gradientboosting": GradientBoostingRegressor(random_state=seed),
             "mlp": MLPRegressor(hidden_layer_sizes=(64, 32), max_iter=500, random_state=seed),
+            "vgg_face": ScutVGGFaceRegressor(seed=seed),
         }
     if key not in models:
         raise ValueError(f"Unknown {task_type} model: {name}")
@@ -292,6 +298,14 @@ def build_estimator(name, task_type, seed):
 
 def default_model_for_task(task_type):
     return "logistic" if task_type == "classification" else "linear"
+
+
+def has_image_features(X):
+    return hasattr(X, "columns") and "image_path" in X.columns
+
+
+def is_raw_image_model(estimator):
+    return bool(getattr(estimator, "uses_raw_images", False))
 
 
 def normalize_method(method):

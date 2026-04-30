@@ -152,29 +152,30 @@ def load_synthetic(n=5000, p=0.7, seed=None, **kwargs):
 def load_scut(
     seed=None,
     data_root=None,
-    ratings_file=None,
-    embeddings_file=None,
-    landmark_dir=None,
     target="Average",
-    max_rows=None,
     **kwargs,
 ):
     data_root = _resolve_scut_root(data_root)
-    ratings_path = Path(ratings_file) if ratings_file else data_root / "ImageExp" / "Selected_Ratings.csv"
+    ratings_path = data_root / "ImageExp" / "Selected_Ratings.csv"
+    image_root = data_root / "Images"
     if not ratings_path.exists():
-        raise FileNotFoundError(
-            "SCUT ratings not found. Pass --scut-data-root or --scut-ratings-file; "
-            f"looked for {ratings_path}."
-        )
+        raise FileNotFoundError(f"SCUT ratings not found: {ratings_path}")
+    if not image_root.exists():
+        raise FileNotFoundError(f"SCUT images not found: {image_root}")
 
     ratings = pd.read_csv(ratings_path)
+    ratings.columns = ratings.columns.str.strip()
+    ratings["Filename"] = ratings["Filename"].astype(str).str.strip()
     if target not in ratings.columns:
         raise ValueError(f"SCUT target column '{target}' not found in {ratings_path}")
     ratings = ratings[["Filename", target]].dropna()
-    if max_rows:
-        ratings = ratings.sample(n=min(int(max_rows), len(ratings)), random_state=seed)
 
-    features = _load_scut_feature_frame(ratings, data_root, embeddings_file, landmark_dir)
+    paths = ratings["Filename"].map(lambda filename: image_root / filename)
+    missing = [str(path) for path in paths if not path.exists()]
+    if missing:
+        raise FileNotFoundError(f"SCUT images missing; first missing file: {missing[0]}")
+
+    features = pd.DataFrame({"image_path": paths.map(str)})
     features["sex"] = ratings["Filename"].map(lambda name: 1 if str(name)[1].upper() == "M" else 0).to_numpy()
     features["race"] = ratings["Filename"].map(lambda name: 1 if str(name)[0].upper() == "C" else 0).to_numpy()
     y = ratings[target].to_numpy(dtype=float)
@@ -182,40 +183,10 @@ def load_scut(
     return features.reset_index(drop=True), y, ["sex", "race"]
 
 
-def _load_scut_feature_frame(ratings, data_root, embeddings_file, landmark_dir):
-    if embeddings_file:
-        embeddings = pd.read_csv(embeddings_file)
-        if "Filename" not in embeddings.columns:
-            raise ValueError("SCUT embeddings file must contain a Filename column")
-        merged = ratings[["Filename"]].merge(embeddings, on="Filename", how="left")
-        feature_frame = merged.drop(columns=["Filename"])
-        if feature_frame.isna().any().any():
-            raise ValueError("SCUT embeddings are missing rows for some ratings")
-        return feature_frame
-
-    landmarks = Path(landmark_dir) if landmark_dir else data_root / "landmark_txt"
-    if landmarks.exists():
-        rows = []
-        for filename in ratings["Filename"]:
-            path = landmarks / f"{Path(filename).stem}.txt"
-            if not path.exists():
-                rows.append(None)
-                continue
-            coords = np.loadtxt(path).reshape(-1)
-            rows.append(coords)
-        if all(row is not None for row in rows):
-            width = len(rows[0])
-            columns = [f"landmark_{i}" for i in range(width)]
-            return pd.DataFrame(rows, columns=columns)
-
-    # Metadata fallback keeps the loader usable for smoke tests; landmark or embedding features are preferred.
-    return pd.DataFrame({"filename_id": ratings["Filename"].map(lambda name: int("".join(filter(str.isdigit, str(name))) or 0))})
-
-
 def _resolve_scut_root(data_root):
-    candidates = []
     if data_root:
-        candidates.append(Path(data_root))
+        return Path(data_root)
+    candidates = []
     if os.environ.get("SCUT_DATA_ROOT"):
         candidates.append(Path(os.environ["SCUT_DATA_ROOT"]))
     candidates.extend([

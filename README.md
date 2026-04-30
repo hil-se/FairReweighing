@@ -22,11 +22,8 @@ Run a quick smoke experiment:
 python src/main.py \
   --datasets Synthetic \
   --models auto ridge \
-  --methods none fair-reweighing discretized-reweighing \
   --density-models Neighbor Kernel \
-  --repeat 3 \
-  --tune-density \
-  --output result/jair_runs.csv
+  --repeat 3
 ```
 
 The command writes:
@@ -35,36 +32,31 @@ The command writes:
 - `result/jair_runs_summary.csv`: means, standard deviations, and 95% CIs.
 - `result/jair_runs_comparisons.csv`: paired Wilcoxon tests and effect sizes
   against the `none` baseline.
-- `result/jair_weight_examples.csv`: high/low sample-weight examples for
-  qualitative discussion.
+- `result/jair_runs_weights.csv`: high/low sample-weight examples for
+  qualitative discussion, when reweighing is used.
 
 Run all non-SCUT paper datasets:
 
 ```bash
-python src/main.py --all-paper-datasets --repeat 30 --tune-density
+python src/main.py \
+  --datasets Synthetic LSAC Community Community_Con Insurance German Heart \
+  --repeat 30
 ```
 
 ## SCUT-FBP5500
 
-The SCUT loader looks for the neighboring `../Comparable/Data` directory by
-default. It uses `ImageExp/Selected_Ratings.csv` for targets and
-`landmark_txt/*.txt` as direct image-derived regression features. You can override
-paths explicitly:
+The SCUT loader is standalone by default and looks under `data/scut` for
+`ImageExp/Selected_Ratings.csv`, `Images/`, and `vgg_face_weights.h5`. Its
+feature source is raw image paths, and `--models auto` selects the VGG-Face
+single encoder used by the neighboring `../Comparable` project.
 
 ```bash
 python src/main.py \
   --datasets SCUT \
-  --models ridge rf gbr \
-  --methods none fair-reweighing discretized-reweighing \
+  --models vgg_face \
   --density-models Neighbor Kernel \
-  --repeat 30 \
-  --tune-density \
-  --scut-data-root ../Comparable/Data \
-  --output result/jair_scut_runs.csv
+  --repeat 30
 ```
-
-If you have precomputed image embeddings, pass a CSV with `Filename` plus numeric
-embedding columns via `--scut-embeddings-file`.
 
 ## Revision Artifacts
 
