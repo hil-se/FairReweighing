@@ -1,11 +1,10 @@
 import time
 
 import numpy as np
-import pandas as pd
 from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.compose import make_column_selector as selector
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPRegressor
@@ -43,6 +42,8 @@ class Experiment:
         self.dataset_options = dataset_options or {}
         self.X, self.y, self.protected = load_dataset(data, seed=seed, **self.dataset_options)
         self.task_type = "classification" if len(np.unique(self.y)) == 2 else "regression"
+        if self.balance == "fair-reweighing" and self.task_type == "classification":
+            self.density_model = "Reweighing"
         self.regressor_name = self.default_model(regressor)
         self.regressor = build_estimator(self.regressor_name, self.task_type, seed)
         if has_image_features(self.X) and not is_raw_image_model(self.regressor):
@@ -51,8 +52,6 @@ class Experiment:
             raise ValueError("The vgg_face model requires SCUT image_path features.")
         self.preprocessor = None
         self.selected_density_param = None
-        self.weight_examples = pd.DataFrame()
-        self.sample_weight_applied = False
 
     def run(self):
         started = time.perf_counter()
@@ -68,7 +67,7 @@ class Experiment:
         fit_started = time.perf_counter()
         sample_weight = self.make_sample_weight()
         estimator = clone(self.regressor)
-        self.sample_weight_applied = fit_estimator(estimator, X_train, self.y_train, sample_weight)
+        fit_estimator(estimator, X_train, self.y_train, sample_weight)
         fit_seconds = time.perf_counter() - fit_started
 
         y_pred = estimator.predict(X_test)
@@ -81,19 +80,14 @@ class Experiment:
         result.update({
             "dataset": self.data,
             "model": self.regressor_name,
-            "task_type": self.task_type,
             "method": self.balance,
             "density_model": self.density_model if self.balance == "fair-reweighing" else "none",
             "seed": self.seed,
-            "train_size": len(self.X_train),
-            "test_size": len(self.X_test),
             "fit_seconds": fit_seconds,
             "total_seconds": time.perf_counter() - started,
             "selected_radius": self.selected_density_param if self.density_model == "Neighbor" else np.nan,
             "selected_bandwidth": self.selected_density_param if self.density_model == "Kernel" else np.nan,
-            "sample_weight_applied": self.sample_weight_applied,
         })
-        result.update(weight_summary(sample_weight))
         return result
 
     def train_test_split(self):
@@ -127,10 +121,9 @@ class Experiment:
     def make_sample_weight(self):
         if self.balance == "none":
             self.selected_density_param = np.nan
-            self.weight_examples = pd.DataFrame()
             return None
 
-        if self.balance == "fair-reweighing":
+        if self.balance == "fair-reweighing" and self.density_model in {"Neighbor", "Kernel"}:
             self.selected_density_param = self.select_density_param()
         elif self.density_model == "Neighbor":
             self.selected_density_param = 0.5
@@ -150,7 +143,6 @@ class Experiment:
             np.transpose([self.y_train]),
             treatment=self.balance,
         )
-        self.weight_examples = self._weight_examples(weights)
         return weights
 
     def select_density_param(self):
@@ -188,10 +180,14 @@ class Experiment:
                 if self.task_type == "classification" and hasattr(estimator, "predict_proba"):
                     pred = estimator.predict_proba(X_val_t)[:, 1]
                 metrics = Metrics(y_val, pred)
-                fairness = []
-                for protected in self.protected:
-                    fairness.append(abs(metrics.continuous_mi(X_val[protected].to_numpy())))
-                score = float(np.nanmean(fairness)) + 0.01 * metrics.mse()
+                fairness = [
+                    metrics.continuous_mi_crossfit(X_val[protected].to_numpy(), seed=self.seed)
+                    for protected in self.protected
+                ]
+                fairness_score = nanmean_or_nan(fairness)
+                if not np.isfinite(fairness_score):
+                    continue
+                score = fairness_score + 0.01 * metrics.mse()
             except Exception:
                 continue
             if score < best_score:
@@ -201,79 +197,57 @@ class Experiment:
 
     def evaluate(self, y_pred):
         metrics = Metrics(self.y_test, y_pred)
-        result = {
+        r_sep = []
+        i_sep = []
+        c_sep = []
+        c_sep_xfit = []
+        result = {}
+        for protected in self.protected:
+            protected_name = safe_metric_name(protected)
+            sensitive = self.X_test[protected].to_numpy()
+            categorical_sep = metrics.categorical_separation(sensitive, seed=self.seed)
+            protected_r_sep = categorical_sep["r_sep"]
+            protected_i_sep = categorical_sep["i_sep"]
+            protected_c_sep = metrics.continuous_mi(sensitive)
+            protected_c_sep_xfit = metrics.continuous_mi_crossfit(sensitive, seed=self.seed)
+            r_sep.append(protected_r_sep)
+            i_sep.append(protected_i_sep)
+            c_sep.append(protected_c_sep)
+            c_sep_xfit.append(protected_c_sep_xfit)
+            result.update({
+                f"r_sep_{protected_name}": protected_r_sep,
+                f"i_sep_{protected_name}": protected_i_sep,
+                f"c_sep_{protected_name}": protected_c_sep,
+                f"c_sep_xfit_{protected_name}": protected_c_sep_xfit,
+            })
+        result.update({
             "mse": metrics.mse(),
             "mae": metrics.mae(),
-            "rmse": metrics.rmse(),
             "r2": metrics.r2(),
-            "pearson": metrics.pearsonr_coefficient(),
-            "spearman": metrics.spearmanr_coefficient(),
-        }
-        if self.task_type == "classification":
-            result.update({
-                "accuracy": metrics.accuracy(),
-                "precision": metrics.precision(),
-                "recall": metrics.recall(),
-                "f1": metrics.f1(),
-            })
-        continuous_mi_values = []
-        bgl_values = []
-        for protected in self.protected:
-            protected_name = str(protected).replace(" ", "_")
-            summary = metrics.fairness_summary(self.X_test[protected].to_numpy(), protected_name)
-            result.update(summary)
-            continuous_mi_values.append(abs(summary[f"continuous_mi_{protected_name}"]))
-            bgl_values.append(summary[f"bgl_{protected_name}"])
-        result["fairness_mean_abs_continuous_mi"] = float(np.nanmean(continuous_mi_values))
-        result["fairness_max_bgl"] = float(np.nanmax(bgl_values))
+            "r_sep": nanmean_or_nan(r_sep),
+            "i_sep": nanmean_or_nan(i_sep),
+            "c_sep": nanmean_or_nan(c_sep),
+            "c_sep_xfit": nanmean_or_nan(c_sep_xfit),
+        })
         return result
-
-    def _weight_examples(self, weights, n=5):
-        if weights is None:
-            return pd.DataFrame()
-        frame = self.X_train[self.protected].copy()
-        frame["y"] = self.y_train
-        frame["sample_weight"] = weights
-        low = frame.nsmallest(n, "sample_weight").assign(weight_rank="low")
-        high = frame.nlargest(n, "sample_weight").assign(weight_rank="high")
-        examples = pd.concat([low, high], ignore_index=True)
-        examples.insert(0, "seed", self.seed)
-        examples.insert(0, "density_model", self.density_model)
-        examples.insert(0, "method", self.balance)
-        examples.insert(0, "model", self.regressor_name)
-        examples.insert(0, "dataset", self.data)
-        return examples
 
 
 def fit_estimator(estimator, X, y, sample_weight=None):
     if sample_weight is not None and has_fit_parameter(estimator, "sample_weight"):
         estimator.fit(X, y, sample_weight=sample_weight)
-        return True
+        return
     estimator.fit(X, y)
-    return False
 
 
-def weight_summary(weights):
-    if weights is None:
-        return {
-            "weight_mean": np.nan,
-            "weight_std": np.nan,
-            "weight_min": np.nan,
-            "weight_max": np.nan,
-            "weight_p01": np.nan,
-            "weight_p99": np.nan,
-            "weight_effective_n": np.nan,
-        }
-    weights = np.asarray(weights, dtype=float)
-    return {
-        "weight_mean": float(np.mean(weights)),
-        "weight_std": float(np.std(weights)),
-        "weight_min": float(np.min(weights)),
-        "weight_max": float(np.max(weights)),
-        "weight_p01": float(np.quantile(weights, 0.01)),
-        "weight_p99": float(np.quantile(weights, 0.99)),
-        "weight_effective_n": float((weights.sum() ** 2) / np.sum(weights ** 2)),
-    }
+def nanmean_or_nan(values):
+    values = np.asarray(values, dtype=float)
+    if np.isnan(values).all():
+        return np.nan
+    return float(np.nanmean(values))
+
+
+def safe_metric_name(name):
+    return str(name).replace(" ", "_").replace("%", "pct")
 
 
 def build_estimator(name, task_type, seed):
@@ -281,7 +255,6 @@ def build_estimator(name, task_type, seed):
     if task_type == "classification":
         models = {
             "logistic": LogisticRegression(max_iter=1000, random_state=seed),
-            "rf": RandomForestClassifier(n_estimators=200, random_state=seed),
         }
     else:
         models = {

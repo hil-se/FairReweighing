@@ -1,41 +1,99 @@
-import argparse
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.stats import wilcoxon
+from scipy.stats import pearsonr, spearmanr
 
+from data_reader import load_dataset
 from experiment import Experiment
 
 
+# Run configuration. Edit these constants, then run `python src/main.py`.
+#
+# DATASETS:
+#   "Synthetic", "LSAC", "Community", "Community_Con", "Insurance",
+#   "German", "Heart", "SCUT"
+#
+# MODELS:
+#   "auto"      -> linear for regression, logistic for classification, vgg_face for SCUT
+#   "linear"    -> tabular regression
+#   "ridge"     -> tabular regression
+#   "rf"        -> tabular regression
+#   "mlp"       -> tabular regression
+#   "logistic"  -> classification
+#   "vgg_face"  -> SCUT image regression
+#
+# DENSITY_MODELS:
+#   "Neighbor", "Kernel"
+#
+# SCUT_TARGET:
+#   "Average" or participant ratings "P1" through "P60"
+#
+# The methods are fixed paper baselines:
+#   none, fair-reweighing, discretized-reweighing
+
 PAPER_METHODS = ["none", "fair-reweighing", "discretized-reweighing"]
-DEFAULT_DENSITIES = ["Neighbor"]
+DATASETS = ["SCUT"]
+MODELS = ["auto"]
+DENSITY_MODELS = ["Neighbor"]
+REPEAT = 1
+SCUT_TARGET = "P5"
 FIRST_SEED = 1
 OUTPUT = Path("result/jair_runs.csv")
-
+RESULT_COLUMNS = [
+    "dataset",
+    "model",
+    "method",
+    "density_model",
+    "seed",
+    "mse",
+    "mae",
+    "r2",
+    "r_sep",
+    "i_sep",
+    "c_sep",
+    "c_sep_xfit",
+]
+RUN_DETAIL_COLUMNS = [
+    "fit_seconds",
+    "total_seconds",
+    "selected_radius",
+    "selected_bandwidth",
+]
+SUMMARY_METRICS = [
+    "mse",
+    "mae",
+    "r2",
+    "r_sep",
+    "i_sep",
+    "c_sep",
+    "c_sep_xfit",
+]
+SUMMARY_RUNTIME_METRICS = ["fit_seconds", "total_seconds"]
 
 def main():
-    args = parse_args()
-    result, examples = run_grid(args)
+    result = run_grid()
+    result = result[ordered_result_columns(result)]
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    summary_path = OUTPUT.with_name(OUTPUT.stem + "_summary.csv")
+    correlation_path = OUTPUT.with_name(OUTPUT.stem + "_metric_correlations.csv")
     result.to_csv(OUTPUT, index=False)
-    summarize_results(result).to_csv(OUTPUT.with_name(OUTPUT.stem + "_summary.csv"), index=False)
-    compare_to_baseline(result).to_csv(OUTPUT.with_name(OUTPUT.stem + "_comparisons.csv"), index=False)
-    if examples:
-        pd.concat(examples, ignore_index=True).to_csv(OUTPUT.with_name(OUTPUT.stem + "_weights.csv"), index=False)
-    print(f"Wrote results to {OUTPUT}")
+    summarize_results(result).to_csv(summary_path, index=False)
+    metric_correlations(result).to_csv(correlation_path, index=False)
+    print(f"Wrote {len(result)} rows to {OUTPUT}, {summary_path}, and {correlation_path}")
 
 
-def run_grid(args):
-    rows, examples = [], []
-    scut_options = {"target": args.scut_target}
-    for dataset in args.datasets:
-        for repeat_idx in range(args.repeat):
+def run_grid():
+    rows = []
+    scut_options = {"target": SCUT_TARGET}
+    for dataset in DATASETS:
+        task_type = task_type_for_dataset(dataset, FIRST_SEED, scut_options)
+        for repeat_idx in range(REPEAT):
             seed = FIRST_SEED + repeat_idx
-            for model in args.models:
+            for model in MODELS:
                 for method in methods_for_dataset(dataset):
-                    for density in densities_for_method(method, args.density_models):
+                    for density in densities_for_method(method, DENSITY_MODELS, task_type):
                         experiment = Experiment(
                             data=dataset,
                             regressor=model,
@@ -46,32 +104,34 @@ def run_grid(args):
                         )
                         row = experiment.run()
                         rows.append(row)
-                        if not experiment.weight_examples.empty:
-                            examples.append(experiment.weight_examples)
-                        print(
-                            f"{dataset} seed={seed} model={row['model']} method={row['method']} "
-                            f"density={row['density_model']} mse={row['mse']:.4f}"
-                        )
-    return pd.DataFrame(rows), examples
+    return pd.DataFrame(rows)
 
 
 def methods_for_dataset(dataset):
     return PAPER_METHODS
 
 
-def densities_for_method(method, density_models):
+def densities_for_method(method, density_models, task_type):
     if method.replace("_", "-").lower() in {"none", "discretized-reweighing"}:
         return ["Neighbor"]
+    if task_type == "classification":
+        return ["Reweighing"]
     return density_models
 
 
+def task_type_for_dataset(dataset, seed, dataset_options):
+    _, y, _ = load_dataset(dataset, seed=seed, **dataset_options)
+    return "classification" if len(np.unique(y)) == 2 else "regression"
+
+
 def summarize_results(result):
-    group_cols = ["dataset", "model", "task_type", "method", "density_model"]
+    group_cols = ["dataset", "model", "method", "density_model"]
+    metrics = summary_metrics(result)
     rows = []
     for keys, group in result.groupby(group_cols, dropna=False):
         row = dict(zip(group_cols, keys))
         row["n_runs"] = len(group)
-        for metric in numeric_metric_columns(result):
+        for metric in metrics:
             values = pd.to_numeric(group[metric], errors="coerce").dropna()
             if values.empty:
                 continue
@@ -83,50 +143,67 @@ def summarize_results(result):
     return pd.DataFrame(rows)
 
 
-def compare_to_baseline(result):
+def ordered_result_columns(result):
+    per_sensitive = per_sensitive_metric_columns(result)
+    columns = RESULT_COLUMNS + per_sensitive + RUN_DETAIL_COLUMNS
+    return [column for column in columns if column in result.columns]
+
+
+def summary_metrics(result):
+    return [column for column in SUMMARY_METRICS + per_sensitive_metric_columns(result) + SUMMARY_RUNTIME_METRICS if column in result.columns]
+
+
+def per_sensitive_metric_columns(result):
+    prefixes = ("r_sep_", "i_sep_", "c_sep_", "c_sep_xfit_")
+    base_metrics = set(RESULT_COLUMNS + RUN_DETAIL_COLUMNS)
+    return sorted(
+        column
+        for column in result.columns
+        if column.startswith(prefixes) and column not in base_metrics
+    )
+
+
+def metric_correlations(result):
+    metric_pairs = [
+        ("r_sep_gap", "i_sep"),
+        ("r_sep_gap", "c_sep"),
+        ("r_sep_gap", "c_sep_xfit"),
+        ("i_sep", "c_sep"),
+        ("i_sep", "c_sep_xfit"),
+        ("c_sep", "c_sep_xfit"),
+    ]
     rows = []
-    index_cols = ["dataset", "model", "task_type", "seed"]
-    method_cols = ["dataset", "model", "task_type", "method", "density_model"]
-    metric_cols = numeric_metric_columns(result)
-    baseline = result[result["method"] == "none"]
-    for keys, treated in result[result["method"] != "none"].groupby(method_cols, dropna=False):
-        meta = dict(zip(method_cols, keys))
-        base = baseline
-        for col in ["dataset", "model", "task_type"]:
-            base = base[base[col] == meta[col]]
-        merged = treated.merge(base[index_cols + metric_cols], on=index_cols, suffixes=("", "_baseline"))
-        for metric in metric_cols:
-            paired = merged[[metric, f"{metric}_baseline"]].dropna()
-            if paired.empty:
-                continue
-            diff = paired[metric] - paired[f"{metric}_baseline"]
-            p_value = np.nan
-            if len(diff) > 1 and not np.allclose(diff, 0):
-                p_value = wilcoxon(paired[metric], paired[f"{metric}_baseline"]).pvalue
-            rows.append({
-                **meta,
-                "metric": metric,
-                "n_pairs": len(paired),
-                "mean_delta_vs_none": diff.mean(),
-                "wilcoxon_p": p_value,
-                "paired_cohens_d": diff.mean() / diff.std(ddof=1) if len(diff) > 1 and diff.std(ddof=1) > 0 else np.nan,
-            })
+    for keys, group in result.groupby(["dataset", "model"], dropna=False):
+        values = {
+            "r_sep_gap": (group["r_sep"] - 1.0).abs(),
+            "i_sep": group["i_sep"],
+            "c_sep": group["c_sep"],
+            "c_sep_xfit": group["c_sep_xfit"],
+        }
+        for left, right in metric_pairs:
+            pair = pd.DataFrame({"left": values[left], "right": values[right]}).dropna()
+            row = {
+                "dataset": keys[0],
+                "model": keys[1],
+                "metric_x": left,
+                "metric_y": right,
+                "n_pairs": len(pair),
+                "pearson_r": np.nan,
+                "pearson_p": np.nan,
+                "spearman_r": np.nan,
+                "spearman_p": np.nan,
+            }
+            if len(pair) > 1 and pair["left"].nunique() > 1 and pair["right"].nunique() > 1:
+                pearson = pearsonr(pair["left"], pair["right"])
+                spearman = spearmanr(pair["left"], pair["right"])
+                row.update({
+                    "pearson_r": pearson.statistic,
+                    "pearson_p": pearson.pvalue,
+                    "spearman_r": spearman.statistic,
+                    "spearman_p": spearman.pvalue,
+                })
+            rows.append(row)
     return pd.DataFrame(rows)
-
-
-def numeric_metric_columns(result):
-    ignored = {"seed", "train_size", "test_size", "selected_radius", "selected_bandwidth", "sample_weight_applied"}
-    return [col for col in result.columns if col not in ignored and pd.api.types.is_numeric_dtype(result[col])]
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Run the FairReweighing paper experiments.")
-    parser.add_argument("--datasets", nargs="+", default=["Synthetic"], help="Dataset names, e.g. Synthetic LSAC SCUT.")
-    parser.add_argument("--models", nargs="+", default=["auto"], help="auto, linear, ridge, rf, mlp, vgg_face, logistic.")
-    parser.add_argument("--density-models", nargs="+", default=DEFAULT_DENSITIES, help="Neighbor or Kernel.")
-    parser.add_argument("--repeat", type=int, default=1)
-    parser.add_argument("--scut-target", default="Average", help="Average or participant column P1 through P60.")
-    return parser.parse_args()
 
 
 if __name__ == "__main__":

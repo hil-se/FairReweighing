@@ -19,44 +19,34 @@ pip install -r requirements.txt
 Run a quick smoke experiment:
 
 ```bash
-python src/main.py \
-  --datasets Synthetic \
-  --models auto ridge \
-  --density-models Neighbor Kernel \
-  --repeat 3
+python src/main.py
 ```
+
+Edit the constants at the top of `src/main.py` to change datasets, models,
+density estimators, repeat count, or SCUT target.
 
 The command writes:
 
 - `result/jair_runs.csv`: one row per seed/dataset/model/method.
 - `result/jair_runs_summary.csv`: means, standard deviations, and 95% CIs.
-- `result/jair_runs_comparisons.csv`: paired Wilcoxon tests and effect sizes
-  against the `none` baseline.
-- `result/jair_runs_weights.csv`: high/low sample-weight examples for
-  qualitative discussion, when reweighing is used.
+- `result/jair_runs_metric_correlations.csv`: Pearson/Spearman correlations
+  among `r_sep`, `i_sep`, the old `c_sep`, and cross-fitted `c_sep_xfit`.
 
 Run all non-SCUT paper datasets:
 
-```bash
-python src/main.py \
-  --datasets Synthetic LSAC Community Community_Con Insurance German Heart \
-  --repeat 30
-```
+Set `DATASETS = ["Synthetic", "LSAC", "Community", "Community_Con", "Insurance", "German", "Heart"]`
+and `REPEAT = 30` in `src/main.py`, then run `python src/main.py`.
 
 ## SCUT-FBP5500
 
 The SCUT loader is standalone by default and looks under `data/scut` for
 `ImageExp/Selected_Ratings.csv`, `Images/`, and `vgg_face_weights.h5`. Its
-feature source is raw image paths, and `--models auto` selects the VGG-Face
-single encoder used by the neighboring `../Comparable` project.
+feature source is raw image paths, and `MODELS = ["auto"]` selects the VGG-Face
+single encoder for SCUT.
 
-```bash
-python src/main.py \
-  --datasets SCUT \
-  --models vgg_face \
-  --density-models Neighbor Kernel \
-  --repeat 30
-```
+Set `DATASETS = ["SCUT"]`, `MODELS = ["vgg_face"]`,
+`DENSITY_MODELS = ["Neighbor", "Kernel"]`, and `REPEAT = 30` in `src/main.py`,
+then run `python src/main.py`.
 
 ## Revision Artifacts
 

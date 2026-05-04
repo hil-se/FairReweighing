@@ -1,20 +1,13 @@
-import math
-
 import numpy as np
 import pandas as pd
 import sklearn.metrics
-from scipy.stats import norm, pearsonr, spearmanr
+from scipy.stats import norm
 from sklearn.linear_model import LinearRegression, LogisticRegression
-
-try:
-    from fairlearn.metrics import demographic_parity_difference
-except ImportError:
-    demographic_parity_difference = None
-
-from DP_helper import extract_group_pred, pmf2disp, weighted_pmf
+from sklearn.model_selection import KFold, StratifiedKFold
 
 
 EPS = 1e-12
+MAX_CATEGORICAL_GROUPS = 20
 
 
 class Metrics:
@@ -28,203 +21,182 @@ class Metrics:
     def mae(self):
         return sklearn.metrics.mean_absolute_error(self.y, self.y_pred)
 
-    def rmse(self):
-        return math.sqrt(self.mse())
-
     def r2(self):
         if len(np.unique(self.y)) <= 1:
             return np.nan
         return sklearn.metrics.r2_score(self.y, self.y_pred)
 
-    def accuracy(self):
-        return sklearn.metrics.accuracy_score(self.y, self._class_predictions())
+    def categorical_separation(self, s, seed=0, n_splits=10):
+        s = np.asarray(s)
+        result = {"r_sep": np.nan, "i_sep": np.nan}
+        if not _is_categorical(s):
+            return result
 
-    def f1(self):
-        return sklearn.metrics.f1_score(self.y, self._class_predictions(), zero_division=0)
+        joint_actual, margin_actual, joint_positive, margin_positive = self._crossfit_classification_probabilities(
+            s,
+            seed,
+            n_splits,
+        )
 
-    def precision(self):
-        return sklearn.metrics.precision_score(self.y, self._class_predictions(), zero_division=0)
+        mi_mask = np.isfinite(joint_actual) & np.isfinite(margin_actual)
+        if mi_mask.any():
+            cmi = np.mean(np.log(joint_actual[mi_mask] / margin_actual[mi_mask]))
+            conditional_entropy = -np.mean(np.log(margin_actual[mi_mask]))
+            if conditional_entropy > EPS:
+                result["i_sep"] = float(cmi / conditional_entropy)
 
-    def recall(self):
-        return sklearn.metrics.recall_score(self.y, self._class_predictions(), zero_division=0)
+        if len(np.unique(s)) == 2:
+            ratio_mask = np.isfinite(joint_positive) & np.isfinite(margin_positive)
+            if ratio_mask.any():
+                odds_joint = joint_positive[ratio_mask] / (1 - joint_positive[ratio_mask])
+                odds_margin = (1 - margin_positive[ratio_mask]) / margin_positive[ratio_mask]
+                result["r_sep"] = float(np.mean(odds_joint * odds_margin))
+        return result
 
-    def pearsonr_coefficient(self):
-        if len(np.unique(self.y)) <= 1 or len(np.unique(self.y_pred)) <= 1:
-            return np.nan
-        return pearsonr(self.y, self.y_pred)[0]
+    def r_sep(self, s, seed=0, n_splits=10):
+        return self.categorical_separation(s, seed, n_splits)["r_sep"]
 
-    def spearmanr_coefficient(self):
-        if len(np.unique(self.y)) <= 1 or len(np.unique(self.y_pred)) <= 1:
-            return np.nan
-        return spearmanr(self.y, self.y_pred)[0]
-
-    def DP(self, s):
-        if demographic_parity_difference is None:
-            return np.nan
-        return demographic_parity_difference(self.y, self._class_predictions(), sensitive_features=s)
-
-    def EOD(self, s):
-        groups = _binary_groups(s)
-        if groups is None:
-            return np.nan
-        y0, y1, y0_pred, y1_pred = self._grouped(groups, s)
-        tp, fp, tn, fn = self.confusion(y0, y0_pred)
-        denom0 = tp + fn
-        tp, fp, tn, fn = self.confusion(y1, y1_pred)
-        denom1 = tp + fn
-        if denom0 == 0 or denom1 == 0:
-            return np.nan
-        return float(tp) / denom1 - float(self.confusion(y0, y0_pred)[0]) / denom0
-
-    def AOD(self, s):
-        groups = _binary_groups(s)
-        if groups is None:
-            return np.nan
-        y0, y1, y0_pred, y1_pred = self._grouped(groups, s)
-        tp, fp, tn, fn = self.confusion(y0, y0_pred)
-        if (tp + fn) == 0 or (fp + tn) == 0:
-            return np.nan
-        od0 = float(tp) / (tp + fn) + float(fp) / (fp + tn)
-        tp, fp, tn, fn = self.confusion(y1, y1_pred)
-        if (tp + fn) == 0 or (fp + tn) == 0:
-            return np.nan
-        od1 = float(tp) / (tp + fn) + float(fp) / (fp + tn)
-        return (od1 - od0) / 2
-
-    def confusion(self, y, y_pred):
-        tp = fp = tn = fn = 0
-        for true, pred in zip(y, y_pred):
-            if true > 0:
-                if pred > 0:
-                    tp += 1
-                else:
-                    fn += 1
-            else:
-                if pred > 0:
-                    fp += 1
-                else:
-                    tn += 1
-        return tp, fp, tn, fn
-
-    def bgl(self, s, n_bins=2):
-        groups = _groups_for_sensitive(s, n_bins=n_bins)
-        errors = []
-        for group in groups:
-            mask = group["mask"]
-            if mask.sum() > 0:
-                errors.append(sklearn.metrics.mean_squared_error(self.y[mask], self.y_pred[mask]))
-        return max(errors) if errors else np.nan
+    def i_sep(self, s, seed=0, n_splits=10):
+        return self.categorical_separation(s, seed, n_splits)["i_sep"]
 
     def continuous_mi(self, s):
         s = np.asarray(s, dtype=float)
         if len(np.unique(s)) <= 1:
             return 0.0
-        joint = pd.DataFrame({"y": self.y, "y_pred": self.y_pred}, columns=["y", "y_pred"])
-        margin = self.y.reshape(-1, 1)
-
-        model_joint = LinearRegression().fit(joint, s)
-        model_margin = LinearRegression().fit(margin, s)
-        pred_joint = model_joint.predict(joint)
-        pred_margin = model_margin.predict(margin)
+        model_joint = LinearRegression().fit(self._joint_frame(), s)
+        model_margin = LinearRegression().fit(self._margin_frame(), s)
+        pred_joint = model_joint.predict(self._joint_frame())
+        pred_margin = model_margin.predict(self._margin_frame())
 
         rse_joint = max(np.std(pred_joint - s), EPS)
         rse_margin = max(np.std(pred_margin - s), EPS)
         pdf_joint = np.maximum(norm.pdf(s, pred_joint, rse_joint), EPS)
         pdf_margin = np.maximum(norm.pdf(s, pred_margin, rse_margin), EPS)
-        return float(np.mean(np.log(pdf_joint / pdf_margin)))
+        return float(abs(np.mean(np.log(pdf_joint / pdf_margin))))
 
-    def continuous_mi_normalized(self, s):
-        s = np.asarray(s, dtype=float)
+    def continuous_mi_crossfit(self, s, seed=0, n_splits=10):
+        s = np.asarray(s)
         if len(np.unique(s)) <= 1:
             return 0.0
-        margin = self.y.reshape(-1, 1)
-        model_margin = LinearRegression().fit(margin, s)
-        pred_margin = model_margin.predict(margin)
-        rse_margin = max(np.std(pred_margin - s), EPS)
-        pdf_margin = np.maximum(norm.pdf(s, pred_margin, rse_margin), EPS)
-        entropy_proxy = -float(np.mean(np.log(pdf_margin)))
-        if abs(entropy_proxy) < EPS:
+
+        if _is_categorical(s):
+            value = self._categorical_mi_crossfit(s, seed, n_splits)
+        else:
+            value = self._gaussian_mi_crossfit(s.astype(float), seed, n_splits)
+        if np.isnan(value):
             return np.nan
-        return self.continuous_mi(s) / entropy_proxy
+        return max(0.0, value)
 
-    def r_sep(self, s):
-        groups = _binary_groups(s)
-        if groups is None:
+    def _joint_frame(self):
+        return pd.DataFrame({"y": self.y, "y_pred": self.y_pred})
+
+    def _margin_frame(self):
+        return self.y.reshape(-1, 1)
+
+    def _crossfit_classification_probabilities(self, s, seed, n_splits):
+        joint_x = self._joint_frame()
+        margin_x = self._margin_frame()
+        n = len(s)
+        positive = np.sort(np.unique(s))[-1]
+        joint_actual = np.full(n, np.nan)
+        margin_actual = np.full(n, np.nan)
+        joint_positive = np.full(n, np.nan)
+        margin_positive = np.full(n, np.nan)
+
+        for train, test in _folds(s, seed, n_splits):
+            if len(np.unique(s[train])) < 2:
+                continue
+            try:
+                joint_model = LogisticRegression(max_iter=1000).fit(joint_x.iloc[train], s[train])
+                margin_model = LogisticRegression(max_iter=1000).fit(margin_x[train], s[train])
+            except ValueError:
+                continue
+            joint_actual[test] = _actual_class_prob(joint_model, joint_x.iloc[test], s[test])
+            margin_actual[test] = _actual_class_prob(margin_model, margin_x[test], s[test])
+            joint_positive[test] = _class_prob(joint_model, joint_x.iloc[test], positive)
+            margin_positive[test] = _class_prob(margin_model, margin_x[test], positive)
+
+        return joint_actual, margin_actual, joint_positive, margin_positive
+
+    def _categorical_mi_crossfit(self, s, seed, n_splits):
+        joint_x = self._joint_frame()
+        margin_x = self._margin_frame()
+        log_joint = []
+        log_margin = []
+        for train, test in _folds(s, seed, n_splits):
+            try:
+                joint_model = LogisticRegression(max_iter=1000).fit(joint_x.iloc[train], s[train])
+                margin_model = LogisticRegression(max_iter=1000).fit(margin_x[train], s[train])
+            except ValueError:
+                continue
+            log_joint.extend(np.log(_actual_class_prob(joint_model, joint_x.iloc[test], s[test])))
+            log_margin.extend(np.log(_actual_class_prob(margin_model, margin_x[test], s[test])))
+        if not log_joint:
             return np.nan
-        s = np.asarray(s)
-        joint = pd.DataFrame({"y": self.y, "y_pred": self.y_pred}, columns=["y", "y_pred"])
-        margin = self.y.reshape(-1, 1)
-        try:
-            model_joint = LogisticRegression(max_iter=1000).fit(joint, s)
-            model_margin = LogisticRegression(max_iter=1000).fit(margin, s)
-        except ValueError:
+        return float(np.mean(np.asarray(log_joint) - np.asarray(log_margin)))
+
+    def _gaussian_mi_crossfit(self, s, seed, n_splits):
+        joint_x = self._joint_frame()
+        margin_x = self._margin_frame()
+        log_joint = []
+        log_margin = []
+        for train, test in _folds(s, seed, n_splits):
+            joint_model = LinearRegression().fit(joint_x.iloc[train], s[train])
+            margin_model = LinearRegression().fit(margin_x[train], s[train])
+
+            joint_train_pred = joint_model.predict(joint_x.iloc[train])
+            margin_train_pred = margin_model.predict(margin_x[train])
+            joint_scale = max(np.std(s[train] - joint_train_pred), EPS)
+            margin_scale = max(np.std(s[train] - margin_train_pred), EPS)
+
+            joint_pred = joint_model.predict(joint_x.iloc[test])
+            margin_pred = margin_model.predict(margin_x[test])
+            log_joint.extend(norm.logpdf(s[test], joint_pred, joint_scale))
+            log_margin.extend(norm.logpdf(s[test], margin_pred, margin_scale))
+        if not log_joint:
             return np.nan
-
-        prob_joint = np.clip(model_joint.predict_proba(joint)[:, 1], EPS, 1 - EPS)
-        prob_margin = np.clip(model_margin.predict_proba(margin)[:, 1], EPS, 1 - EPS)
-        ratio = (prob_joint / (1 - prob_joint)) * ((1 - prob_margin) / prob_margin)
-        return float(np.mean(ratio))
-
-    def r_sep_a(self, s):
-        groups = _binary_groups(s)
-        if groups is None:
-            return np.nan
-        joint = pd.DataFrame({"y": self.y, "y_pred": self.y_pred}, columns=["y", "y_pred"])
-        try:
-            prob_joint = LogisticRegression(max_iter=1000).fit(joint, s).predict_proba(joint)[:, 1]
-        except ValueError:
-            return np.nan
-        prob_joint = np.clip(prob_joint, EPS, 1 - EPS)
-        return float(np.mean(prob_joint / (1 - prob_joint)))
-
-    def DP_disp(self, s, Theta):
-        pred_group = extract_group_pred(self.y_pred, s)
-        pmf_all = weighted_pmf(self.y_pred, Theta)
-        pmf_group = [weighted_pmf(pred_group[g], Theta) for g in pred_group]
-        return max([pmf2disp(pmf_g, pmf_all) for pmf_g in pmf_group])
-
-    def fairness_summary(self, s, prefix):
-        s = np.asarray(s)
-        summary = {
-            f"bgl_{prefix}": self.bgl(s),
-            f"continuous_mi_{prefix}": self.continuous_mi(s),
-            f"continuous_mi_norm_{prefix}": self.continuous_mi_normalized(s),
-            f"r_sep_{prefix}": self.r_sep(s),
-        }
-        if _is_binary_target(self.y):
-            summary.update({
-                f"dp_{prefix}": self.DP(s),
-                f"aod_{prefix}": self.AOD(s),
-                f"eod_{prefix}": self.EOD(s),
-            })
-        return summary
-
-    def _class_predictions(self):
-        if _is_binary_target(self.y):
-            labels = np.sort(np.unique(self.y))
-            return np.where(self.y_pred >= 0.5, labels[-1], labels[0])
-        return np.rint(self.y_pred)
-
-    def _grouped(self, groups, s):
-        s = np.asarray(s)
-        mask0 = s == groups[0]
-        mask1 = s == groups[1]
-        return self.y[mask0], self.y[mask1], self._class_predictions()[mask0], self._class_predictions()[mask1]
+        return float(np.mean(np.asarray(log_joint) - np.asarray(log_margin)))
 
 
-def _is_binary_target(y):
-    return len(np.unique(y)) == 2
+def _is_categorical(s):
+    return 1 < len(np.unique(s)) <= MAX_CATEGORICAL_GROUPS
 
 
-def _binary_groups(s):
-    unique = np.unique(np.asarray(s))
-    return unique if len(unique) == 2 else None
+def _folds(values, seed, n_splits):
+    values = np.asarray(values)
+    n = len(values)
+    k = min(n_splits, n)
+    if k < 2:
+        return []
+    if _is_categorical(values):
+        counts = pd.Series(values).value_counts()
+        if counts.min() >= 2:
+            k = min(k, int(counts.min()))
+            return StratifiedKFold(n_splits=k, shuffle=True, random_state=seed).split(np.zeros(n), values)
+    return KFold(n_splits=k, shuffle=True, random_state=seed).split(np.zeros(n))
 
 
-def _groups_for_sensitive(s, n_bins=2):
-    s = np.asarray(s)
-    unique = np.unique(s)
-    if len(unique) <= 10:
-        return [{"label": value, "mask": s == value} for value in unique]
-    bins = pd.qcut(pd.Series(s), q=n_bins, labels=False, duplicates="drop")
-    return [{"label": value, "mask": bins.to_numpy() == value} for value in np.unique(bins.dropna())]
+def _actual_class_prob(model, X, values):
+    probs = _probability_matrix(model, X)
+    selected = []
+    for row, value in enumerate(values):
+        index = _class_index(model, value)
+        selected.append(EPS if index is None else probs[row, index])
+    return np.clip(np.asarray(selected), EPS, 1 - EPS)
+
+
+def _class_prob(model, X, value):
+    probs = _probability_matrix(model, X)
+    index = _class_index(model, value)
+    if index is None:
+        return np.full(len(probs), EPS)
+    return np.clip(probs[:, index], EPS, 1 - EPS)
+
+
+def _probability_matrix(model, X):
+    return model.predict_proba(X)
+
+
+def _class_index(model, value):
+    class_index = {label: index for index, label in enumerate(model.classes_)}
+    return class_index.get(value)
