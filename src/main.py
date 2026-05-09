@@ -29,8 +29,8 @@ from experiment import Experiment
 
 CORE_METHODS = ["none", "fair-reweighing"]
 REGRESSION_BASELINES = ["berk-pairwise", "calders-effect-control", "chzhen-repair", "agarwal-bgl"]
-DATASETS = ["Synthetic", "LSAC", "Community", "Community_Con", "Insurance", "German", "Heart"]
-REGRESSION_MODELS = ["linear"]
+DATASETS = ["SCUT"]
+REGRESSION_MODELS = ["vgg_face"]
 CLASSIFICATION_MODELS = ["logistic"]
 DENSITY_MODELS = ["Neighbor", "Kernel"]
 REPEAT = 20

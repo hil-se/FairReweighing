@@ -174,7 +174,7 @@ def _split(n_samples, seed):
 
 def _adam(tf):
     if hasattr(tf.keras.optimizers, "legacy"):
-        return tf.keras.optimizers.legacy.Adam(LEARNING_RATE)
+        return tf.keras.optimizers.Adam(LEARNING_RATE)
     return tf.keras.optimizers.Adam(LEARNING_RATE)
 
 
