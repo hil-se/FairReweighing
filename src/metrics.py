@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import sklearn.metrics
-from scipy.stats import norm
+from scipy.stats import norm, pearsonr, spearmanr, wasserstein_distance
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.model_selection import KFold, StratifiedKFold
 
@@ -59,21 +59,6 @@ class Metrics:
     def i_sep(self, s, seed=0, n_splits=10):
         return self.categorical_separation(s, seed, n_splits)["i_sep"]
 
-    def continuous_mi(self, s):
-        s = np.asarray(s, dtype=float)
-        if len(np.unique(s)) <= 1:
-            return 0.0
-        model_joint = LinearRegression().fit(self._joint_frame(), s)
-        model_margin = LinearRegression().fit(self._margin_frame(), s)
-        pred_joint = model_joint.predict(self._joint_frame())
-        pred_margin = model_margin.predict(self._margin_frame())
-
-        rse_joint = max(np.std(pred_joint - s), EPS)
-        rse_margin = max(np.std(pred_margin - s), EPS)
-        pdf_joint = np.maximum(norm.pdf(s, pred_joint, rse_joint), EPS)
-        pdf_margin = np.maximum(norm.pdf(s, pred_margin, rse_margin), EPS)
-        return float(abs(np.mean(np.log(pdf_joint / pdf_margin))))
-
     def continuous_mi_crossfit(self, s, seed=0, n_splits=10):
         s = np.asarray(s)
         if len(np.unique(s)) <= 1:
@@ -86,6 +71,19 @@ class Metrics:
         if np.isnan(value):
             return np.nan
         return max(0.0, value)
+
+    def regression_fairness_summary(self, s, n_bins=5):
+        s = np.asarray(s)
+        groups = _groups_for_sensitive(s, n_bins)
+        residual = self.y_pred - self.y
+        return {
+            "pred_pearson_abs": _abs_corr(s, self.y_pred, pearsonr),
+            "pred_spearman_abs": _abs_corr(s, self.y_pred, spearmanr),
+            "pred_mean_gap": _max_group_gap(self.y_pred, groups),
+            "residual_mean_gap": _max_group_gap(residual, groups),
+            "group_mse_gap": _max_group_mse_gap(self.y, self.y_pred, groups),
+            "wasserstein_pred_gap": _max_pairwise_wasserstein(self.y_pred, groups),
+        }
 
     def _joint_frame(self):
         return pd.DataFrame({"y": self.y, "y_pred": self.y_pred})
@@ -160,6 +158,77 @@ class Metrics:
 
 def _is_categorical(s):
     return 1 < len(np.unique(s)) <= MAX_CATEGORICAL_GROUPS
+
+
+def _groups_for_sensitive(s, n_bins):
+    series = pd.Series(np.asarray(s))
+    if _is_categorical(series.to_numpy()):
+        return series.to_numpy()
+    try:
+        return pd.qcut(series, q=n_bins, labels=False, duplicates="drop").to_numpy()
+    except ValueError:
+        return np.zeros(len(series), dtype=int)
+
+
+def _abs_corr(x, y, corr_fn):
+    x = _numeric_array(x)
+    y = np.asarray(y, dtype=float)
+    mask = np.isfinite(x) & np.isfinite(y)
+    if mask.sum() < 2 or len(np.unique(x[mask])) <= 1 or len(np.unique(y[mask])) <= 1:
+        return np.nan
+    return float(abs(corr_fn(x[mask], y[mask]).statistic))
+
+
+def _numeric_array(values):
+    try:
+        return np.asarray(values, dtype=float)
+    except (TypeError, ValueError):
+        codes, _ = pd.factorize(values)
+        return codes.astype(float)
+
+
+def _max_group_gap(values, groups):
+    summaries = _group_values(values, groups)
+    means = [np.mean(group) for group in summaries if len(group) > 0]
+    if len(means) < 2:
+        return np.nan
+    return float(np.max(means) - np.min(means))
+
+
+def _max_group_mse_gap(y, y_pred, groups):
+    y_groups = _group_values(y, groups)
+    pred_groups = _group_values(y_pred, groups)
+    mses = [
+        sklearn.metrics.mean_squared_error(y_group, pred_group)
+        for y_group, pred_group in zip(y_groups, pred_groups)
+        if len(y_group) > 0
+    ]
+    if len(mses) < 2:
+        return np.nan
+    return float(np.max(mses) - np.min(mses))
+
+
+def _max_pairwise_wasserstein(values, groups):
+    summaries = [group for group in _group_values(values, groups) if len(group) > 0]
+    if len(summaries) < 2:
+        return np.nan
+    distances = []
+    for left in range(len(summaries)):
+        for right in range(left + 1, len(summaries)):
+            distances.append(wasserstein_distance(summaries[left], summaries[right]))
+    return float(np.max(distances))
+
+
+def _group_values(values, groups):
+    values = np.asarray(values, dtype=float)
+    groups = np.asarray(groups)
+    result = []
+    for group in pd.Series(groups).dropna().unique():
+        mask = groups == group
+        group_values = values[mask]
+        group_values = group_values[np.isfinite(group_values)]
+        result.append(group_values)
+    return result
 
 
 def _folds(values, seed, n_splits):

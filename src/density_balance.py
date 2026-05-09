@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from scipy.stats import bernoulli, norm
 
 from density_est import DensityKernel, DensityNeighbor, Reweighing
@@ -37,11 +36,6 @@ class DensityBalance:
             return None
         if treatment_key == "groundtruth":
             return self._synthetic_ground_truth_weight(A, y)
-        if treatment_key == "discretized-reweighing":
-            A = _discretize_frame(A, self.n_bins)
-            y = _discretize_frame(y, self.n_bins)
-            density = Reweighing()
-            return _ratio_weight(density, A, y)
         if treatment_key == "fairbalancevariant":
             return _normalize_weight(1.0 / np.maximum(self.model.density(np.concatenate((A, y), axis=1)), EPS))
         if treatment_key == "fairbalance":
@@ -95,14 +89,6 @@ def _as_2d(values):
     return arr
 
 
-def _discretize_frame(values, n_bins):
-    frame = pd.DataFrame(_as_2d(values))
-    for column in frame:
-        if frame[column].nunique(dropna=False) > n_bins:
-            frame[column] = pd.qcut(frame[column], q=n_bins, labels=False, duplicates="drop")
-    return frame.fillna(-1).to_numpy()
-
-
 def _normalize_model(model):
     aliases = {
         None: "Neighbor",
@@ -125,9 +111,6 @@ def _normalize_treatment(treatment):
         "fairreweighing": "fair-reweighing",
         "fair-reweighing": "fair-reweighing",
         "reweighing": "fair-reweighing",
-        "discretized": "discretized-reweighing",
-        "discretized-reweighing": "discretized-reweighing",
-        "original-reweighing": "discretized-reweighing",
         "groundtruth": "groundtruth",
         "fairbalancevariant": "fairbalancevariant",
         "fairbalance": "fairbalance",
