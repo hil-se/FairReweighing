@@ -15,6 +15,7 @@ HEAD_BATCH_SIZE = 128
 PATIENCE = 5
 VALIDATION_SPLIT = 0.2
 LEARNING_RATE = 1e-3
+_FEATURE_CACHE = {}
 
 
 class ScutVGGFaceRegressor(BaseEstimator, RegressorMixin):
@@ -34,8 +35,8 @@ class ScutVGGFaceRegressor(BaseEstimator, RegressorMixin):
         train_idx, val_idx = _split(len(paths), self.seed)
 
         self.encoder_ = build_vgg_face_feature_extractor()
-        train_features = self.encoder_.predict(_dataset(paths[train_idx]), verbose=1)
-        val_features = self.encoder_.predict(_dataset(paths[val_idx]), verbose=1)
+        train_features = _encoded_features(self.encoder_, paths[train_idx], verbose=1)
+        val_features = _encoded_features(self.encoder_, paths[val_idx], verbose=1)
 
         train_weights = weights[train_idx] if weights is not None else None
         val_data = (val_features, y[val_idx], weights[val_idx]) if weights is not None else (val_features, y[val_idx])
@@ -55,7 +56,7 @@ class ScutVGGFaceRegressor(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X):
-        features = self.encoder_.predict(_dataset(_paths(X)), verbose=0)
+        features = _encoded_features(self.encoder_, _paths(X), verbose=0)
         return self.model_.predict(features, batch_size=HEAD_BATCH_SIZE, verbose=0).reshape(-1)
 
 
@@ -163,6 +164,13 @@ def _paths(X):
         return X["image_path"].astype(str).to_numpy()
     array = np.asarray(X)
     return array.reshape(-1).astype(str)
+
+
+def _encoded_features(encoder, paths, verbose=0):
+    key = tuple(np.asarray(paths, dtype=str).tolist())
+    if key not in _FEATURE_CACHE:
+        _FEATURE_CACHE[key] = encoder.predict(_dataset(paths), verbose=verbose)
+    return _FEATURE_CACHE[key]
 
 
 def _split(n_samples, seed):

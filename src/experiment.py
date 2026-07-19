@@ -22,7 +22,7 @@ from vgg_face_model import ScutVGGFaceRegressor
 
 
 DEFAULT_RADIUS_GRID = [0.1, 0.2, 0.3, 0.5, 0.75, 1.0]
-DEFAULT_BANDWIDTH_GRID = [0.05, 0.1, 0.2, 0.5, 1.0]
+DEFAULT_BANDWIDTH_GRID = [0.1, 0.2, 0.3, 0.5, 0.75, 1.0]
 DEFAULT_TEST_SIZE = 0.5
 DEFAULT_BINS = 5
 BERK_PAIRWISE_LAMBDA = 1.0
@@ -30,6 +30,7 @@ BERK_PAIRWISE_NEIGHBORS = 5
 BERK_RIDGE = 1e-6
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 class Experiment:
@@ -51,8 +52,10 @@ class Experiment:
         self.dataset_options = dataset_options or {}
         self.X, self.y, self.protected = load_dataset(data, seed=seed, **self.dataset_options)
         self.task_type = "classification" if len(np.unique(self.y)) == 2 else "regression"
-        if self.balance == "fair-reweighing" and self.task_type == "classification":
+        if self.balance == "reweighing" and self.task_type == "classification":
             self.density_model = "Reweighing"
+        if self.balance == "fairbalance" and self.task_type == "classification":
+            self.density_model = "FairBalance"
         self.regressor_name = self.default_model(regressor)
         self.regressor = build_estimator(self.regressor_name, self.task_type, seed)
         if has_image_features(self.X) and not is_raw_image_model(self.regressor):
@@ -97,7 +100,7 @@ class Experiment:
             "dataset": self.data,
             "model": self.regressor_name,
             "method": self.balance,
-            "density_model": self.density_model if self.balance == "fair-reweighing" else "none",
+            "density_model": self.density_model if self.balance in {"fair-reweighing", "reweighing", "fairbalance"} else "none",
             "seed": self.seed,
             "fit_seconds": fit_seconds,
             "total_seconds": time.perf_counter() - started,
@@ -217,11 +220,6 @@ class Experiment:
         return X_test_aug @ coef
 
     def select_density_param(self):
-        if is_raw_image_model(self.regressor):
-            return 0.5 if self.density_model == "Neighbor" else 0.2
-        if self.regressor_name in {"rf", "mlp"}:
-            return 0.5 if self.density_model == "Neighbor" else 0.2
-
         grid = DEFAULT_RADIUS_GRID if self.density_model == "Neighbor" else DEFAULT_BANDWIDTH_GRID
         X_fit, X_val, y_fit, y_val = train_test_split(
             self.X_train,
@@ -232,9 +230,13 @@ class Experiment:
         )
         X_fit = X_fit.reset_index(drop=True)
         X_val = X_val.reset_index(drop=True)
-        preprocessor = clone(self.preprocessor).fit(X_fit)
-        X_fit_t = preprocessor.transform(X_fit)
-        X_val_t = preprocessor.transform(X_val)
+        if is_raw_image_model(self.regressor):
+            X_fit_t = X_fit[["image_path"]]
+            X_val_t = X_val[["image_path"]]
+        else:
+            preprocessor = clone(self.preprocessor).fit(X_fit)
+            X_fit_t = preprocessor.transform(X_fit)
+            X_val_t = preprocessor.transform(X_val)
 
         best_param = grid[0]
         best_score = float("inf")
@@ -273,45 +275,42 @@ class Experiment:
         r_sep = []
         i_sep = []
         c_sep_xfit = []
-        extra_metrics = {
-            "pred_pearson_abs": [],
-            "pred_spearman_abs": [],
-            "pred_mean_gap": [],
-            "residual_mean_gap": [],
-            "group_mse_gap": [],
-            "wasserstein_pred_gap": [],
-        }
+        aod = []
+        eod = []
         result = {}
         for protected in self.protected:
             protected_name = safe_metric_name(protected)
             sensitive = self.X_test[protected].to_numpy()
             categorical_sep = metrics.categorical_separation(sensitive, seed=self.seed)
+            equalized_odds = metrics.equalized_odds_metrics(sensitive)
             protected_r_sep = categorical_sep["r_sep"]
             protected_i_sep = categorical_sep["i_sep"]
             protected_c_sep_xfit = metrics.continuous_mi_crossfit(sensitive, seed=self.seed)
+            protected_aod = equalized_odds["aod"]
+            protected_eod = equalized_odds["eod"]
             r_sep.append(protected_r_sep)
             i_sep.append(protected_i_sep)
             c_sep_xfit.append(protected_c_sep_xfit)
-            fairness_summary = metrics.regression_fairness_summary(sensitive, n_bins=self.n_bins)
-            for metric_name, metric_value in fairness_summary.items():
-                extra_metrics[metric_name].append(metric_value)
-                result[f"{metric_name}_{protected_name}"] = metric_value
+            aod.append(protected_aod)
+            eod.append(protected_eod)
             result.update({
                 f"r_sep_{protected_name}": protected_r_sep,
                 f"i_sep_{protected_name}": protected_i_sep,
                 f"c_sep_xfit_{protected_name}": protected_c_sep_xfit,
+                f"aod_{protected_name}": protected_aod,
+                f"eod_{protected_name}": protected_eod,
             })
         result.update({
             "mse": metrics.mse(),
             "mae": metrics.mae(),
             "r2": metrics.r2(),
+            "accuracy": metrics.accuracy(),
+            "f1": metrics.f1(),
+            "aod": nanmean_or_nan(aod),
+            "eod": nanmean_or_nan(eod),
             "r_sep": nanmean_or_nan(r_sep),
             "i_sep": nanmean_or_nan(i_sep),
             "c_sep_xfit": nanmean_or_nan(c_sep_xfit),
-        })
-        result.update({
-            metric_name: nanmean_or_nan(values)
-            for metric_name, values in extra_metrics.items()
         })
         return result
 
@@ -516,7 +515,9 @@ def normalize_method(method):
         "none": "none",
         "fairreweighing": "fair-reweighing",
         "fair-reweighing": "fair-reweighing",
-        "reweighing": "fair-reweighing",
+        "reweighing": "reweighing",
+        "fairbalance": "fairbalance",
+        "fair-balance": "fairbalance",
         "berk": "berk-pairwise",
         "berk-pairwise": "berk-pairwise",
         "calders": "calders-effect-control",
@@ -543,6 +544,8 @@ def normalize_density(density_model):
         "kde": "Kernel",
         "reweighing": "Reweighing",
         "discrete": "Reweighing",
+        "fairbalance": "FairBalance",
+        "fair-balance": "FairBalance",
     }
     key = aliases.get(str(density_model).lower() if density_model is not None else None)
     if key is None:

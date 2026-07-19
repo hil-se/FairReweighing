@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import sklearn.metrics
-from scipy.stats import norm, pearsonr, spearmanr, wasserstein_distance
+from scipy.stats import norm
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.model_selection import KFold, StratifiedKFold
 
@@ -25,6 +25,50 @@ class Metrics:
         if len(np.unique(self.y)) <= 1:
             return np.nan
         return sklearn.metrics.r2_score(self.y, self.y_pred)
+
+    def accuracy(self):
+        if len(np.unique(self.y)) != 2:
+            return np.nan
+        return sklearn.metrics.accuracy_score(self.y, self.hard_prediction())
+
+    def f1(self):
+        if len(np.unique(self.y)) != 2:
+            return np.nan
+        return sklearn.metrics.f1_score(self.y, self.hard_prediction(), zero_division=0)
+
+    def hard_prediction(self):
+        if len(np.unique(self.y)) != 2:
+            return self.y_pred
+        labels = np.sort(np.unique(self.y))
+        return np.where(self.y_pred >= 0.5, labels[-1], labels[0])
+
+    def equalized_odds_metrics(self, s):
+        s = np.asarray(s)
+        result = {"aod": np.nan, "eod": np.nan}
+        if len(np.unique(self.y)) != 2 or len(np.unique(s)) != 2:
+            return result
+
+        y_labels = np.sort(np.unique(self.y))
+        s_labels = np.sort(np.unique(s))
+        positive_y = y_labels[-1]
+        y_hat = self.hard_prediction()
+
+        rates = []
+        for group in s_labels:
+            group_mask = s == group
+            positive_mask = group_mask & (self.y == positive_y)
+            negative_mask = group_mask & (self.y != positive_y)
+            if not positive_mask.any() or not negative_mask.any():
+                return result
+            tpr = np.mean(y_hat[positive_mask] == positive_y)
+            fpr = np.mean(y_hat[negative_mask] == positive_y)
+            rates.append((tpr, fpr))
+
+        tpr_gap = abs(rates[1][0] - rates[0][0])
+        fpr_gap = abs(rates[1][1] - rates[0][1])
+        result["eod"] = float(tpr_gap)
+        result["aod"] = float(0.5 * (tpr_gap + fpr_gap))
+        return result
 
     def categorical_separation(self, s, seed=0, n_splits=10):
         s = np.asarray(s)
@@ -60,6 +104,12 @@ class Metrics:
         return self.categorical_separation(s, seed, n_splits)["i_sep"]
 
     def continuous_mi_crossfit(self, s, seed=0, n_splits=10):
+        value = self.continuous_mi_crossfit_raw(s, seed=seed, n_splits=n_splits)
+        if np.isnan(value):
+            return np.nan
+        return max(0.0, value)
+
+    def continuous_mi_crossfit_raw(self, s, seed=0, n_splits=10):
         s = np.asarray(s)
         if len(np.unique(s)) <= 1:
             return 0.0
@@ -68,22 +118,7 @@ class Metrics:
             value = self._categorical_mi_crossfit(s, seed, n_splits)
         else:
             value = self._gaussian_mi_crossfit(s.astype(float), seed, n_splits)
-        if np.isnan(value):
-            return np.nan
-        return max(0.0, value)
-
-    def regression_fairness_summary(self, s, n_bins=5):
-        s = np.asarray(s)
-        groups = _groups_for_sensitive(s, n_bins)
-        residual = self.y_pred - self.y
-        return {
-            "pred_pearson_abs": _abs_corr(s, self.y_pred, pearsonr),
-            "pred_spearman_abs": _abs_corr(s, self.y_pred, spearmanr),
-            "pred_mean_gap": _max_group_gap(self.y_pred, groups),
-            "residual_mean_gap": _max_group_gap(residual, groups),
-            "group_mse_gap": _max_group_mse_gap(self.y, self.y_pred, groups),
-            "wasserstein_pred_gap": _max_pairwise_wasserstein(self.y_pred, groups),
-        }
+        return value
 
     def _joint_frame(self):
         return pd.DataFrame({"y": self.y, "y_pred": self.y_pred})
@@ -142,13 +177,16 @@ class Metrics:
             joint_model = LinearRegression().fit(joint_x.iloc[train], s[train])
             margin_model = LinearRegression().fit(margin_x[train], s[train])
 
-            joint_train_pred = joint_model.predict(joint_x.iloc[train])
-            margin_train_pred = margin_model.predict(margin_x[train])
+            # Some Accelerate-backed NumPy builds emit matmul warnings even
+            # when these OLS predictions are finite.
+            with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+                joint_train_pred = joint_model.predict(joint_x.iloc[train])
+                margin_train_pred = margin_model.predict(margin_x[train])
+                joint_pred = joint_model.predict(joint_x.iloc[test])
+                margin_pred = margin_model.predict(margin_x[test])
             joint_scale = max(np.std(s[train] - joint_train_pred), EPS)
             margin_scale = max(np.std(s[train] - margin_train_pred), EPS)
 
-            joint_pred = joint_model.predict(joint_x.iloc[test])
-            margin_pred = margin_model.predict(margin_x[test])
             log_joint.extend(norm.logpdf(s[test], joint_pred, joint_scale))
             log_margin.extend(norm.logpdf(s[test], margin_pred, margin_scale))
         if not log_joint:
@@ -168,67 +206,6 @@ def _groups_for_sensitive(s, n_bins):
         return pd.qcut(series, q=n_bins, labels=False, duplicates="drop").to_numpy()
     except ValueError:
         return np.zeros(len(series), dtype=int)
-
-
-def _abs_corr(x, y, corr_fn):
-    x = _numeric_array(x)
-    y = np.asarray(y, dtype=float)
-    mask = np.isfinite(x) & np.isfinite(y)
-    if mask.sum() < 2 or len(np.unique(x[mask])) <= 1 or len(np.unique(y[mask])) <= 1:
-        return np.nan
-    return float(abs(corr_fn(x[mask], y[mask]).statistic))
-
-
-def _numeric_array(values):
-    try:
-        return np.asarray(values, dtype=float)
-    except (TypeError, ValueError):
-        codes, _ = pd.factorize(values)
-        return codes.astype(float)
-
-
-def _max_group_gap(values, groups):
-    summaries = _group_values(values, groups)
-    means = [np.mean(group) for group in summaries if len(group) > 0]
-    if len(means) < 2:
-        return np.nan
-    return float(np.max(means) - np.min(means))
-
-
-def _max_group_mse_gap(y, y_pred, groups):
-    y_groups = _group_values(y, groups)
-    pred_groups = _group_values(y_pred, groups)
-    mses = [
-        sklearn.metrics.mean_squared_error(y_group, pred_group)
-        for y_group, pred_group in zip(y_groups, pred_groups)
-        if len(y_group) > 0
-    ]
-    if len(mses) < 2:
-        return np.nan
-    return float(np.max(mses) - np.min(mses))
-
-
-def _max_pairwise_wasserstein(values, groups):
-    summaries = [group for group in _group_values(values, groups) if len(group) > 0]
-    if len(summaries) < 2:
-        return np.nan
-    distances = []
-    for left in range(len(summaries)):
-        for right in range(left + 1, len(summaries)):
-            distances.append(wasserstein_distance(summaries[left], summaries[right]))
-    return float(np.max(distances))
-
-
-def _group_values(values, groups):
-    values = np.asarray(values, dtype=float)
-    groups = np.asarray(groups)
-    result = []
-    for group in pd.Series(groups).dropna().unique():
-        mask = groups == group
-        group_values = values[mask]
-        group_values = group_values[np.isfinite(group_values)]
-        result.append(group_values)
-    return result
 
 
 def _folds(values, seed, n_splits):

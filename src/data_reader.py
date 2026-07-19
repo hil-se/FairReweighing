@@ -1,10 +1,23 @@
 import os
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from synthetic_config import (
+    N_SYNTHETIC,
+    P_A1,
+    synthetic_height_mean,
+    synthetic_height_sd,
+    synthetic_power_mean,
+    synthetic_power_sd,
+)
 from sklearn.model_selection import train_test_split
 
+
+warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
+warnings.filterwarnings("ignore", message="Could not find the number of physical cores*")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data"
@@ -14,15 +27,23 @@ def load_dataset(name, seed=None, **kwargs):
     loaders = {
         "community": load_communities_bi,
         "communities": load_communities_bi,
+        "community_multi": load_communities_multi,
+        "communities_multi": load_communities_multi,
         "community_con": load_communities_con,
         "community-continuous": load_communities_con,
         "insurance": load_insurance,
+        "insurance_multi": load_insurance_multi,
         "lsac": load_lsac,
+        "lsac_multi": load_lsac_multi,
         "german": load_german,
         "heart": load_heart,
         "synthetic": load_synthetic,
-        "scut": load_scut,
-        "scut-fbp5500": load_scut,
+        "scut": load_scut_multi,
+        "scut-fbp5500": load_scut_multi,
+        "scut_sex": load_scut_sex,
+        "scut-sex": load_scut_sex,
+        "scut_multi": load_scut_multi,
+        "scut-multi": load_scut_multi,
     }
     key = str(name).lower()
     if key not in loaders:
@@ -85,10 +106,8 @@ def load_communities_con(seed=None, **kwargs):
     labels = data["ViolentCrimesPerPop"].values.astype(np.float32)
     data = data.drop(columns=["ViolentCrimesPerPop", "state", "county", "community", "communityname", "fold"])
     data.fillna(0, inplace=True)
-    features = pd.DataFrame(data.values.astype(np.float32))
-
-    # Column 2 is racepctblack after dropping identifiers; this keeps the paper's Race% setting explicit.
-    protected = [2]
+    features = pd.DataFrame(data.values.astype(np.float32), columns=data.columns)
+    protected = ["racepctblack"]
     return features, labels, protected
 
 
@@ -110,39 +129,88 @@ def load_communities_bi(seed=None, **kwargs):
     return df, y, ["race"]
 
 
+def load_communities_multi(seed=None, **kwargs):
+    df = pd.read_csv(DATA_DIR / "communities.csv")
+    df = df.fillna(0)
+    protected = ["racepctblack", "racePctWhite", "racePctAsian", "racePctHisp"]
+    y = np.array(df["ViolentCrimesPerPop"])
+    X = df.drop("ViolentCrimesPerPop", axis=1)
+    return X, y, protected
+
+
 def load_lsac(seed=None, **kwargs):
-    df = pd.read_csv(DATA_DIR / "lawschool.csv")
-    df = df.dropna()
-    df["race"] = [int(race == 7.0) for race in df["race"]]
-    df, _ = train_test_split(df, test_size=0.7, stratify=df["race"], random_state=seed)
-    y = np.array(df["ugpa"] / max(df["ugpa"]))
-    df = df.drop("ugpa", axis=1)
+    return _load_lsac(seed=seed, protected=["race"])
+
+
+def load_lsac_multi(seed=None, **kwargs):
+    return _load_lsac(seed=seed, protected=["race", "gender"])
+
+
+def _load_lsac(seed=None, protected=None):
+    df = pd.read_csv(DATA_DIR / "lawschool.csv", skipinitialspace=True, na_values=["NA", ""])
+    df.columns = df.columns.str.strip()
+    for column in df.select_dtypes(include=["object", "string"]).columns:
+        df[column] = df[column].astype(str).str.strip()
+    df = df.replace({"NA": np.nan, "": np.nan, "nan": np.nan})
+    model_columns = [
+        "race",
+        "cluster",
+        "lsat",
+        "ugpa",
+        "zfygpa",
+        "fulltime",
+        "fam_inc",
+        "age",
+        "gender",
+    ]
+    for column in ["race", "cluster", "lsat", "ugpa", "zfygpa", "fulltime", "fam_inc", "age"]:
+        df[column] = pd.to_numeric(df[column], errors="coerce")
+    df = df[model_columns].dropna().copy()
+    df["race"] = (df["race"] == 7.0).astype(int)
     df["gender"] = df["gender"].map({"male": 1, "female": 0})
-    df_bar = df["bar1"]
-    df = df.drop("bar1", axis=1)
-    df["bar1"] = [int(grade == "P") for grade in df_bar]
-    return df, y, ["race"]
+    df = df.dropna(subset=["gender"])
+
+    # Keep the manuscript's 6,240-case benchmark fixed across repeated splits.
+    # The earlier loader resampled the source data for every experiment seed.
+    if len(df) > 6240:
+        df, _ = train_test_split(
+            df,
+            train_size=6240,
+            stratify=df["race"],
+            random_state=0,
+        )
+
+    y = df.pop("zfygpa").to_numpy(dtype=float)
+    return df.reset_index(drop=True), y, protected or ["race"]
 
 
 def load_insurance(seed=None, **kwargs):
+    return _load_insurance(protected=["age"])
+
+
+def load_insurance_multi(seed=None, **kwargs):
+    return _load_insurance(protected=["age", "sex"])
+
+
+def _load_insurance(protected):
     data = pd.read_csv(DATA_DIR / "insurance.csv")
     data["sex"] = data["sex"].apply(lambda x: 1 if x == "male" else 0)
     dependent = "charges"
     X = data.drop(dependent, axis=1)
     X["age"] = X["age"] / max(X["age"])
     y = np.array(data[dependent])
-    return X, y / max(y), ["age"]
+    return X, y / max(y), protected
 
 
-def load_synthetic(n=5000, p=0.7, seed=None, **kwargs):
+def load_synthetic(n=N_SYNTHETIC, p=P_A1, seed=None, **kwargs):
     rng = np.random.default_rng(seed)
     keys = ["sex", "height"]
     data = {key: [] for key in keys}
     y = []
     for _ in range(n):
         sex = 1 if rng.random() < p else 0
-        height = rng.normal(1.65 + 0.1 * sex, 0.1 + 0.05 * sex)
-        power = rng.normal(0.5 + 0.1 * sex, 0.1 + 0.05 * sex)
+        height = rng.normal(synthetic_height_mean(sex), synthetic_height_sd(sex))
+        power = rng.normal(synthetic_power_mean(sex), synthetic_power_sd(sex))
         data["sex"].append(sex)
         data["height"].append(height)
         y.append(height + power)
@@ -153,6 +221,7 @@ def load_scut(
     seed=None,
     data_root=None,
     target="Average",
+    protected=None,
     **kwargs,
 ):
     data_root = _resolve_scut_root(data_root)
@@ -180,7 +249,15 @@ def load_scut(
     features["race"] = ratings["Filename"].map(lambda name: 1 if str(name)[0].upper() == "C" else 0).to_numpy()
     y = ratings[target].to_numpy(dtype=float)
     y = y / np.nanmax(y)
-    return features.reset_index(drop=True), y, ["sex", "race"]
+    return features.reset_index(drop=True), y, protected or ["sex", "race"]
+
+
+def load_scut_sex(seed=None, **kwargs):
+    return load_scut(seed=seed, protected=["sex"], **kwargs)
+
+
+def load_scut_multi(seed=None, **kwargs):
+    return load_scut(seed=seed, protected=["sex", "race"], **kwargs)
 
 
 def _resolve_scut_root(data_root):

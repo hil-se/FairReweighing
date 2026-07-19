@@ -1,0 +1,81 @@
+seed,scenario,c_sep_xfit_raw,c_sep_xfit
+1,Conditional-independence null,-8.124995602437976e-05,0.0
+1,Linear conditional dependence,0.353043247623125,0.353043247623125
+1,Nonlinear mean dependence,-0.0018853670943219513,0.0
+1,Variance-only dependence,-0.0007575245124807597,0.0
+2,Conditional-independence null,-7.810920931439671e-05,0.0
+2,Linear conditional dependence,0.348643487960789,0.348643487960789
+2,Nonlinear mean dependence,-0.00012839196853107766,0.0
+2,Variance-only dependence,-0.0001937143251380497,0.0
+3,Conditional-independence null,-0.00040510434280795795,0.0
+3,Linear conditional dependence,0.37416357184280047,0.37416357184280047
+3,Nonlinear mean dependence,-0.0018611444982035668,0.0
+3,Variance-only dependence,-0.00033344383286655746,0.0
+4,Conditional-independence null,-0.00018794582266601223,0.0
+4,Linear conditional dependence,0.35040676225812867,0.35040676225812867
+4,Nonlinear mean dependence,0.0017513562597209723,0.0017513562597209723
+4,Variance-only dependence,-0.0006574960094117931,0.0
+5,Conditional-independence null,9.63974797402494e-05,9.63974797402494e-05
+5,Linear conditional dependence,0.3557439085965476,0.3557439085965476
+5,Nonlinear mean dependence,-0.0007985241868967124,0.0
+5,Variance-only dependence,-0.00048078191194874596,0.0
+6,Conditional-independence null,-0.0002429961669616761,0.0
+6,Linear conditional dependence,0.3592073495819154,0.3592073495819154
+6,Nonlinear mean dependence,-0.0009893354736136284,0.0
+6,Variance-only dependence,0.0013234715575924448,0.0013234715575924448
+7,Conditional-independence null,-5.809366326698048e-05,0.0
+7,Linear conditional dependence,0.3591400420026952,0.3591400420026952
+7,Nonlinear mean dependence,-0.0004549147214700835,0.0
+7,Variance-only dependence,-0.000292629062328708,0.0
+8,Conditional-independence null,-7.636033675102971e-05,0.0
+8,Linear conditional dependence,0.3665283043790334,0.3665283043790334
+8,Nonlinear mean dependence,-0.0006790381307449798,0.0
+8,Variance-only dependence,-0.00045493823405885915,0.0
+9,Conditional-independence null,-2.7281232893980517e-05,0.0
+9,Linear conditional dependence,0.36859069685979795,0.36859069685979795
+9,Nonlinear mean dependence,0.0009471850157765072,0.0009471850157765072
+9,Variance-only dependence,-0.00015006846676462836,0.0
+10,Conditional-independence null,-4.073458861646598e-05,0.0
+10,Linear conditional dependence,0.36442291770576735,0.36442291770576735
+10,Nonlinear mean dependence,-0.0005383246480997237,0.0
+10,Variance-only dependence,-0.001050519008705102,0.0
+11,Conditional-independence null,-0.00023108576509846837,0.0
+11,Linear conditional dependence,0.38131932112636807,0.38131932112636807
+11,Nonlinear mean dependence,-0.0006841628203928228,0.0
+11,Variance-only dependence,-0.0004345708911286916,0.0
+12,Conditional-independence null,-0.00020238986833842496,0.0
+12,Linear conditional dependence,0.3469462152703909,0.3469462152703909
+12,Nonlinear mean dependence,-0.0002832420561038535,0.0
+12,Variance-only dependence,-0.0004101475577917454,0.0
+13,Conditional-independence null,-0.00014296311786713664,0.0
+13,Linear conditional dependence,0.3627318055866722,0.3627318055866722
+13,Nonlinear mean dependence,-0.0009041037847235365,0.0
+13,Variance-only dependence,-0.000584486767595807,0.0
+14,Conditional-independence null,-0.0002552152916790064,0.0
+14,Linear conditional dependence,0.3548103639012633,0.3548103639012633
+14,Nonlinear mean dependence,-0.001225670671650053,0.0
+14,Variance-only dependence,-0.0004363586078079845,0.0
+15,Conditional-independence null,-0.00024273618503194903,0.0
+15,Linear conditional dependence,0.36914866083686515,0.36914866083686515
+15,Nonlinear mean dependence,-0.0006469965357463685,0.0
+15,Variance-only dependence,-0.0007437873572174849,0.0
+16,Conditional-independence null,0.0003755744581726922,0.0003755744581726922
+16,Linear conditional dependence,0.3733564663516986,0.3733564663516986
+16,Nonlinear mean dependence,0.0007422663455870097,0.0007422663455870097
+16,Variance-only dependence,-0.00035352581128235075,0.0
+17,Conditional-independence null,-0.000144946619273992,0.0
+17,Linear conditional dependence,0.3527896569774566,0.3527896569774566
+17,Nonlinear mean dependence,-0.0008941313759761913,0.0
+17,Variance-only dependence,-0.00023225904945950405,0.0
+18,Conditional-independence null,-0.0003240385429494694,0.0
+18,Linear conditional dependence,0.3665398305170143,0.3665398305170143
+18,Nonlinear mean dependence,-0.0007108083693856592,0.0
+18,Variance-only dependence,-0.0002460283399757322,0.0
+19,Conditional-independence null,-0.0003230202290664222,0.0
+19,Linear conditional dependence,0.35737368849191825,0.35737368849191825
+19,Nonlinear mean dependence,-0.0008504885497550404,0.0
+19,Variance-only dependence,-0.00047243016797127776,0.0
+20,Conditional-independence null,-0.0002638827165255056,0.0
+20,Linear conditional dependence,0.3535912439919781,0.3535912439919781
+20,Nonlinear mean dependence,-0.0008703802301096666,0.0
+20,Variance-only dependence,-5.178404999815966e-05,0.0

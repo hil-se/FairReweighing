@@ -1,7 +1,7 @@
 import numpy as np
-from scipy.stats import bernoulli, norm
 
 from density_est import DensityKernel, DensityNeighbor, Reweighing
+from synthetic_config import synthetic_ground_truth_weight
 
 
 EPS = 1e-12
@@ -48,21 +48,7 @@ class DensityBalance:
         return _ratio_weight(self.model, A, y)
 
     def _synthetic_ground_truth_weight(self, A, y):
-        A = A.astype(float)
-        y = y.astype(float)
-        wA_true = bernoulli.pmf(A, 0.7).flatten()
-        wy_true = np.zeros(len(y))
-        w_true = np.zeros(len(y))
-
-        for i in range(len(y)):
-            yi = y[i][0]
-            wy_true[i] = norm.pdf(yi, 2.35, 0.21) * 0.7 + norm.pdf(yi, 2.15, 0.14) * 0.3
-            if A[i][0] == 1:
-                w_true[i] = norm.pdf(yi, 2.35, 0.21) * 0.7
-            else:
-                w_true[i] = norm.pdf(yi, 2.15, 0.14) * 0.3
-
-        return _normalize_weight(wA_true * wy_true / np.maximum(w_true, EPS))
+        return synthetic_ground_truth_weight(A, y, eps=EPS)
 
 
 def _ratio_weight(model, A, y):
@@ -98,6 +84,8 @@ def _normalize_model(model):
         "kde": "Kernel",
         "reweighing": "Reweighing",
         "discrete": "Reweighing",
+        "fairbalance": "Reweighing",
+        "fair-balance": "Reweighing",
     }
     key = aliases.get(str(model).lower() if model is not None else None)
     if key is None:

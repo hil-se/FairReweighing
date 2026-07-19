@@ -1,0 +1,3 @@
+dataset,n,fairicp_csep,none_csep,best_fr_csep,fairicp_mse,none_mse,best_fr_mse,fairicp_r2,none_r2,best_fr_r2,fairicp_acc,best_fr_acc,permutation
+SCUT_Sex,20,0.004746868435565382,0.0242442920039783,,0.10527628767711594,0.0307366762437676,,-0.8933689984118331,0.447410320035604,,,,vgg_face_feature_quantile_bin_permutation
+SCUT_Multi,20,0.004050426799162937,0.0138764413180457,,0.08613406953598574,0.0307366762437676,,-0.549471056579548,0.447410320035604,,,,vgg_face_feature_quantile_bin_permutation

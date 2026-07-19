@@ -1,0 +1,2 @@
+dataset,n,fairicp_permutation,mse,mae,r2,accuracy,f1,aod,eod,r_sep,i_sep,c_sep_xfit,fit_seconds
+Synthetic,20,quantile_bin_permutation_regression_adaptation,0.012632836678477194,0.08944970621743106,0.751218403041705,,,,,1.2819538290659032,0.0970681923818401,0.050405724081414915,1.1250242313002672

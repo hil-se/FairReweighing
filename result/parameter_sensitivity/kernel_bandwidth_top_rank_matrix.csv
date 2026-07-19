@@ -1,0 +1,12 @@
+bandwidth,Synthetic_rank,Synthetic_top_rank,LSAC_rank,LSAC_top_rank,LSAC_Multi_rank,LSAC_Multi_top_rank,Community_rank,Community_top_rank,Community_Con_rank,Community_Con_top_rank,Community_Multi_rank,Community_Multi_top_rank,Insurance_rank,Insurance_top_rank,Insurance_Multi_rank,Insurance_Multi_top_rank,top_rank_count,all_top_rank,chosen_universal_bandwidth
+0.1,2,False,0,True,0,True,0,True,0,True,4,False,0,True,0,True,6,False,False
+0.11,2,False,0,True,0,True,0,True,0,True,4,False,0,True,0,True,6,False,False
+0.12,2,False,0,True,0,True,0,True,0,True,4,False,0,True,0,True,6,False,False
+0.13,2,False,0,True,0,True,0,True,0,True,4,False,0,True,0,True,6,False,False
+0.14,2,False,0,True,0,True,0,True,0,True,3,False,0,True,0,True,6,False,False
+0.15,2,False,0,True,0,True,0,True,0,True,3,False,0,True,0,True,6,False,False
+0.16,2,False,0,True,0,True,0,True,0,True,3,False,1,False,0,True,5,False,False
+0.17,2,False,0,True,1,False,0,True,0,True,3,False,1,False,0,True,4,False,False
+0.18,2,False,0,True,1,False,0,True,0,True,3,False,1,False,0,True,4,False,False
+0.19,2,False,0,True,1,False,0,True,0,True,2,False,1,False,0,True,4,False,False
+0.2,2,False,0,True,1,False,0,True,0,True,2,False,1,False,0,True,4,False,False

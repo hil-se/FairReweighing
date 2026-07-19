@@ -1,0 +1,6 @@
+mse,mae,r2,accuracy,f1,r_sep_age,i_sep_age,c_sep_xfit_age,aod_age,eod_age,aod,eod,r_sep,i_sep,c_sep_xfit,dataset,model,method,density_model,seed,lambda_vec,epochs,batch_size,fit_seconds,fairicp_permutation
+0.030660437346641593,0.13475589988684503,0.12067966571786215,,,,,0.0,,,,,,,0.0,Insurance,FairICP-linear_model,fairicp,none,1,0.3,20,64,0.6130090000006021,quantile_bin_permutation
+0.030412302187473657,0.121586146373551,0.2358812894513458,,,,,0.06193129257125281,,,,,,,0.06193129257125281,Insurance,FairICP-linear_model,fairicp,none,2,0.3,20,64,0.1648885419999715,quantile_bin_permutation
+0.01843255896480606,0.10877174379076052,0.5138785911694916,,,,,0.07344552940733783,,,,,,,0.07344552940733783,Insurance,FairICP-linear_model,fairicp,none,3,0.3,20,64,0.16595999999844935,quantile_bin_permutation
+0.019330293746204666,0.11274665256193048,0.42270214765799774,,,,,0.036444663076591687,,,,,,,0.036444663076591687,Insurance,FairICP-linear_model,fairicp,none,4,0.3,20,64,0.1647423329995945,quantile_bin_permutation
+0.04073737862250555,0.16732133632209575,-0.23010919363621074,,,,,0.000692017366328743,,,,,,,0.000692017366328743,Insurance,FairICP-linear_model,fairicp,none,5,0.3,20,64,0.1688054580008611,quantile_bin_permutation

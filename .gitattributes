@@ -1,0 +1,20 @@
+* text=auto
+
+*.bib text eol=lf
+*.cff text eol=lf
+*.csv text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.tex text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+
+*.h5 binary
+*.jpg binary
+*.pdf binary
+*.png binary
+*.zip binary
+
+# Preserve source-dataset formatting and the archived legacy manuscript.
+*.csv -whitespace
+docs/EMSE2025.tex -whitespace

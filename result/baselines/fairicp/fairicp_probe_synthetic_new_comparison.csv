@@ -1,0 +1,2 @@
+dataset,n,fairicp_csep,none_csep,best_fr_csep,fairicp_mse,none_mse,best_fr_mse,fairicp_r2,none_r2,best_fr_r2,fairicp_acc,best_fr_acc,permutation
+Synthetic,20,0.0504057240814149,0.0168546984843586,0.0016128925337767,0.0126328366784771,0.0077497847565376,0.0078916585434134,0.751218403041705,0.847309247194478,0.8445184395301364,,,quantile_bin_permutation_regression_adaptation

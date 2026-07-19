@@ -1,9 +1,44 @@
+# Python environments and caches
 __pycache__/
 *.py[cod]
-.DS_Store
 .pytest_cache/
 .ruff_cache/
 .venv/
+.uv-cache/
+.mpl-cache/
+
+# Editors, operating-system metadata, and local agent instructions
+.DS_Store
+.idea/
 .vscode/
+AGENTS.md
+
+# LaTeX build intermediates (keep source, bibliography, BBL, figures, and PDF)
+*.aux
+*.bcf
+*.blg
+*.cut
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.nav
+*.out
+*.run.xml
+*.snm
+*.synctex.gz
+*.toc
+
+# Local working copies and generated submission staging
+docs/JAIR/backups/
+docs/JAIR/submission/FairReweighing_JAIR_submission/
+docs/reviews.txt
+result/backup/
+result/cache/
+result/**/*checkpoint*.csv
+result/parameter_sensitivity/density_parameter_rank_lsac_corrected.csv
+
+# Externally distributed assets
 data/scut/Images
 data/scut/vgg_face_weights.h5

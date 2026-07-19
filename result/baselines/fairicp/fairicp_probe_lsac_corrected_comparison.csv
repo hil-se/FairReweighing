@@ -1,0 +1,3 @@
+dataset,n,fairicp_csep,none_csep,best_fr_csep,fairicp_mse,none_mse,best_fr_mse,fairicp_r2,none_r2,best_fr_r2,fairicp_acc,best_fr_acc,permutation
+LSAC,20,0.039754898732092384,0.0532329347491909,,0.7747576840155301,0.0090727660268966,,0.0988309141580794,0.1432078643718978,,,,quantile_bin_permutation_regression_adaptation
+LSAC_Multi,20,0.019175658263424926,0.0492482958702677,,0.7764418694421967,0.0090727660268966,,0.09687132150474935,0.1432078643718978,,,,quantile_bin_permutation_regression_adaptation

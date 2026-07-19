@@ -1,0 +1,10 @@
+scenario,Kernel 0.1,Kernel 0.2,Kernel 0.3,Kernel 0.4,Kernel 0.5,Kernel 0.6,Kernel 0.7,Kernel 0.8,Kernel 0.9,Kernel 1.0,Kernel Dynamic,Neighbor 0.1,Neighbor 0.2,Neighbor 0.3,Neighbor 0.4,Neighbor 0.5,Neighbor 0.6,Neighbor 0.7,Neighbor 0.8,Neighbor 0.9,Neighbor 1.0,Neighbor Dynamic
+balanced_groups,0,0,0,0,1,1,2,2,2,2,0,2,1,1,0,0,0,1,1,2,2,0
+baseline,0,0,0,0,1,1,2,2,2,2,0,2,1,0,0,0,0,0,1,1,2,0
+heterogeneous_noise,0,1,2,2,2,2,2,2,2,2,0,0,0,1,2,3,3,3,3,4,4,1
+high_noise,0,0,0,0,1,1,1,2,2,2,1,0,0,0,0,0,0,0,0,0,0,0
+imbalanced_groups,0,0,0,0,1,1,1,1,1,2,0,1,1,0,0,0,0,1,1,1,1,1
+low_noise,0,0,0,1,2,3,3,4,4,4,0,1,0,0,0,0,0,1,2,3,3,0
+rare_tail,0,0,0,1,1,2,2,2,2,2,0,1,0,0,0,0,1,1,2,2,2,0
+strong_gap,1,0,1,2,3,4,5,5,6,6,1,2,1,0,0,1,2,3,4,5,6,1
+weak_gap,1,0,0,0,1,1,1,2,2,2,1,0,0,0,0,0,0,0,0,0,0,0

@@ -1,2 +1,0 @@
-dataset,model,baseline_mse,baseline_r2,baseline_c_sep_xfit,best_accuracy_method,best_accuracy_density,best_accuracy_mse,best_accuracy_r2,best_fairness_method,best_fairness_density,best_fairness_c_sep_xfit,c_sep_xfit_reduction_pct,best_fairness_mse,best_fairness_r2,mse_change_pct_at_best_fairness
-Insurance,linear,0.0090839163010623,0.7457732532239694,0.0168211557948289,none,none,0.0090839163010623,0.7457732532239694,fair-reweighing,Kernel,0.0115176010679423,31.529074408293635,0.0093104227401,0.7396992095793241,2.4934888381920866
