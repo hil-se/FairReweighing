@@ -12,6 +12,7 @@ __pycache__/
 .idea/
 .vscode/
 AGENTS.md
+docs/
 
 # LaTeX build intermediates (keep source, bibliography, BBL, figures, and PDF)
 *.aux
@@ -31,9 +32,6 @@ AGENTS.md
 *.toc
 
 # Local working copies and generated submission staging
-docs/JAIR/backups/
-docs/JAIR/submission/FairReweighing_JAIR_submission/
-docs/reviews.txt
 result/backup/
 result/cache/
 result/**/*checkpoint*.csv

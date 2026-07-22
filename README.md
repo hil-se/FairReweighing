@@ -1,8 +1,8 @@
 # FairReweighing
 
-This repository contains the implementation, seed-level outputs, figures, and
-JAIR manuscript for **FairReweighing: Density-Ratio Reweighing for Separation
-in Fair Regression**.
+This repository provides the code for the paper **FairReweighing: Density
+Estimation-Based Reweighing Framework for Improving Separation in Fair
+Regression**.
 
 FairReweighing estimates the density ratio
 
