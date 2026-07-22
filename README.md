@@ -23,24 +23,7 @@ standard downstream learner.
 - `result/parameter_sensitivity/`: fixed-versus-Dynamic ablation outputs.
 - `result/synthetic/`: analytic-weight and metric-calibration outputs.
 - `result/figures/`: generated manuscript figures.
-- `docs/JAIR/`: JAIR LaTeX source, bibliography, figures, and compiled PDF.
 
-## Environment
-
-The artifact uses Python 3.12 and [uv](https://docs.astral.sh/uv/). Install the
-locked environment from the repository root:
-
-```bash
-uv sync --frozen
-```
-
-The reported runs used Python 3.12.12 on macOS 26.5.2, an Apple M4 system
-(10 CPU cores), and 16 GB RAM. TensorFlow exposed only the CPU during these
-runs; tensorflow-metal 1.2.0 was installed, but no supported GPU device was
-available. The runtime reported 128 KB L1 instruction, 64 KB L1 data, and
-4 MB L2 cache, with no L3 cache value. Principal package versions were NumPy
-2.1.3, pandas 3.0.2, SciPy 1.17.1, scikit-learn 1.8.0, Matplotlib 3.10.9, and
-TensorFlow 2.19.1. The lock file records the full software environment.
 
 ## Main Experiments
 
@@ -133,20 +116,6 @@ LSAC, German Credit, Heart Disease, Insurance, and SCUT-FBP5500 sources.
 SCUT images and VGG-Face weights must be obtained separately under their source
 terms. Derived SCUT face-feature caches are also not redistributed.
 
-## Manuscript
-
-Compile from `docs/JAIR/`:
-
-```bash
-cd docs/JAIR
-latexmk -pdf -interaction=nonstopmode -halt-on-error FairReweighing_JAIR.tex
-```
-
-The manuscript reads figures from the same directory. Seed-level CSV files,
-not rounded table entries, are the source for all paired tests.
-
-A validated JAIR upload archive is available at
-`docs/JAIR/submission/FairReweighing_JAIR_submission.zip`.
 
 ## Citation
 
